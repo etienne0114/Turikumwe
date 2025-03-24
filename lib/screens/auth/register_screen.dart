@@ -69,7 +69,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(AppStrings.register),
+        title: const Text(AppStrings.register),
         elevation: 0,
       ),
       body: SafeArea(
@@ -160,7 +160,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(AppStrings.haveAccount),
+                    const Text(AppStrings.haveAccount),
                     TextButton(
                       onPressed: () {
                         Navigator.pushReplacement(
@@ -168,7 +168,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           MaterialPageRoute(builder: (context) => const LoginScreen()),
                         );
                       },
-                      child: Text(AppStrings.login),
+                      child: const Text(AppStrings.login),
                     ),
                   ],
                 ),

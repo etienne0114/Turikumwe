@@ -32,7 +32,7 @@ class Event {
       'image': image,
       'groupId': groupId,
       'organizerId': organizerId,
-      'attendeesIds': attendeesIds != null ? attendeesIds!.join(',') : null,
+      'attendeesIds': attendeesIds?.join(','),
     };
   }
   
@@ -46,9 +46,7 @@ class Event {
       image: map['image'],
       groupId: map['groupId'],
       organizerId: map['organizerId'],
-      attendeesIds: map['attendeesIds'] != null 
-          ? map['attendeesIds'].split(',').map<int>((id) => int.parse(id)).toList() 
-          : null,
+      attendeesIds: map['attendeesIds']?.split(',').map<int>((id) => int.parse(id)).toList(),
     );
   }
 }

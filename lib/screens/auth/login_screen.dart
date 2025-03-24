@@ -81,9 +81,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 30),
                   
                   // Title
-                  Text(
+                  const Text(
                     AppStrings.login,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
                     ),
@@ -134,7 +134,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       onPressed: () {
                         // TODO: Implement forgot password
                       },
-                      child: Text(AppStrings.forgotPassword),
+                      child: const Text(AppStrings.forgotPassword),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -151,7 +151,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(AppStrings.noAccount),
+                      const Text(AppStrings.noAccount),
                       TextButton(
                         onPressed: () {
                           Navigator.push(
@@ -159,7 +159,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             MaterialPageRoute(builder: (context) => const RegisterScreen()),
                           );
                         },
-                        child: Text(AppStrings.register),
+                        child: const Text(AppStrings.register),
                       ),
                     ],
                   ),

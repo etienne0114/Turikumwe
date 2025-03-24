@@ -85,15 +85,15 @@ class StoryCard extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
+                      const Row(
                         children: [
-                          const CircleAvatar(
+                          CircleAvatar(
                             radius: 14,
                             // In a real app, load the user's profile picture
                             child: Icon(Icons.person, size: 14),
                           ),
-                          const SizedBox(width: 8),
-                          const Text(
+                          SizedBox(width: 8),
+                          Text(
                             'User Name', // In a real app, load the user's name
                             style: TextStyle(
                               fontWeight: FontWeight.bold,

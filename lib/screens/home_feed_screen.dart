@@ -1,8 +1,6 @@
 // lib/screens/home_feed_screen.dart
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:turikumwe/models/post.dart';
-import 'package:turikumwe/services/auth_service.dart';
 import 'package:turikumwe/services/database_service.dart';
 import 'package:turikumwe/widgets/post_card.dart';
 
@@ -35,7 +33,6 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading posts: $e');
       setState(() {
         _isLoading = false;
       });

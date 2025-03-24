@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:turikumwe/constants/app_colors.dart';
-import 'package:turikumwe/models/message.dart';
 import 'package:turikumwe/screens/chat_screen.dart';
 
 class MessagesScreen extends StatefulWidget {
@@ -14,7 +13,7 @@ class MessagesScreen extends StatefulWidget {
 
 class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  bool _isLoading = false;
+  final bool _isLoading = false;
   
   // Dummy data for chat previews
   final List<Map<String, dynamic>> _directChats = [

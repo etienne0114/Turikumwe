@@ -1,7 +1,5 @@
 // lib/screens/events_screen.dart
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/models/event.dart';
 import 'package:turikumwe/services/database_service.dart';
 import 'package:turikumwe/widgets/event_card.dart';
@@ -46,7 +44,6 @@ class _EventsScreenState extends State<EventsScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading events: $e');
       setState(() {
         _isLoading = false;
       });

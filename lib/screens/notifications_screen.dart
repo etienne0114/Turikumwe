@@ -1,4 +1,5 @@
 // lib/screens/notifications_screen.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/models/notification.dart' as app_notification;
@@ -42,7 +43,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         });
       }
     } catch (e) {
-      print('Error loading notifications: $e');
       setState(() {
         _isLoading = false;
       });
@@ -64,8 +64,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         // Refresh notifications list
         _loadNotifications();
       }
+    // ignore: empty_catches
     } catch (e) {
-      print('Error marking all notifications as read: $e');
     }
   }
 
@@ -90,7 +90,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         }).toList();
       });
     } catch (e) {
-      print('Error marking notification as read: $e');
+      if (kDebugMode) {
+        print('Error marking notification as read: $e');
+      }
     }
   }
 
@@ -123,25 +125,25 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
+          Icon(
             Icons.notifications_outlined,
             size: 80,
             color: Colors.grey,
           ),
-          const SizedBox(height: 16),
-          const Text(
+          SizedBox(height: 16),
+          Text(
             'No notifications yet',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 8),
-          const Text(
+          SizedBox(height: 8),
+          Text(
             'When you receive notifications, they will appear here',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.grey),

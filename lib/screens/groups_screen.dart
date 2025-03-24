@@ -1,4 +1,5 @@
 // lib/screens/groups_screen.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:turikumwe/models/group.dart';
 import 'package:turikumwe/services/database_service.dart';
@@ -59,7 +60,9 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading groups: $e');
+      if (kDebugMode) {
+        print('Error loading groups: $e');
+      }
       setState(() {
         _isLoading = false;
       });

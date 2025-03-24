@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/models/post.dart';
-import 'package:turikumwe/services/database_service.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
 class PostCard extends StatefulWidget {

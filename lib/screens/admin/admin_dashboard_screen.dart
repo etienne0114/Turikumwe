@@ -139,7 +139,7 @@ class AdminOverviewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return const Center(
       child: Text('Admin Overview Screen - Dashboard will be shown here'),
     );
   }
@@ -150,7 +150,7 @@ class ManageUsersScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return const Center(
       child: Text('Manage Users Screen - User management will be shown here'),
     );
   }
@@ -161,7 +161,7 @@ class ManageContentScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return const Center(
       child: Text('Manage Content Screen - Content moderation will be shown here'),
     );
   }
@@ -172,7 +172,7 @@ class ManageReportsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return const Center(
       child: Text('Manage Reports Screen - User reports will be shown here'),
     );
   }

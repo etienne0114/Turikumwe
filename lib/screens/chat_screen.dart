@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/models/message.dart';
 import 'package:turikumwe/services/auth_service.dart';
-import 'package:turikumwe/services/database_service.dart';
 import 'package:intl/intl.dart';
 
 class ChatScreen extends StatefulWidget {

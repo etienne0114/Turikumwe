@@ -9,7 +9,6 @@ import 'package:turikumwe/screens/home_feed_screen.dart';
 import 'package:turikumwe/screens/messages_screen.dart';
 import 'package:turikumwe/screens/profile_screen.dart';
 import 'package:turikumwe/screens/stories_screen.dart';
-import 'package:turikumwe/services/auth_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
