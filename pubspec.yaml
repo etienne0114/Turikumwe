@@ -1,0 +1,59 @@
+name: turikumwe
+description: A community app designed to unite Rwandans by connecting people across districts and backgrounds.
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=2.19.0 <3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.5
+  sqflite: ^2.2.8+4
+  path: ^1.8.3
+  provider: ^6.0.5
+  shared_preferences: ^2.1.1
+  http: ^0.13.6
+  intl: ^0.18.1
+  image_picker: ^0.8.7+5
+  flutter_svg: ^2.0.5
+  lottie: ^2.3.2
+  flutter_local_notifications: ^14.1.1
+  url_launcher: ^6.1.11
+  flutter_markdown: ^0.6.15
+  flutter_secure_storage: ^8.0.0
+  cached_network_image: ^3.2.3
+  timeago: ^3.4.0
+  connectivity_plus: ^4.0.1
+  google_fonts: ^4.0.4
+  flutter_staggered_grid_view: ^0.6.2
+  page_transition: ^2.0.9
+  animated_text_kit: ^4.2.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/animations/
+
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Poppins-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Poppins-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Poppins-Light.ttf
+          weight: 300
