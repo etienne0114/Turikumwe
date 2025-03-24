@@ -59,5 +59,6 @@ flutter {
 
 dependencies {
     // Add desugaring dependency
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.2.2'
 }
