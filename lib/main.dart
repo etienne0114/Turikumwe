@@ -2,19 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:turikumwe/constants/app_theme.dart';
 import 'package:turikumwe/screens/splash_screen.dart';
-import 'package:turikumwe/services/auth_service.dart';
-import 'package:turikumwe/services/database_service.dart';
+import 'package:turikumwe/services/service_locator.dart';
+import 'package:turikumwe/services/database_service.dart'; // Import DatabaseService
+import 'package:turikumwe/services/storage_service.dart'; // Import StorageService
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Initialize database
-  await DatabaseService().initDatabase();
+  // Initialize all services
+  await ServiceLocator.init();
   
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthService()),
+        ChangeNotifierProvider(create: (_) => ServiceLocator.auth),
+        Provider<DatabaseService>(create: (_) => DatabaseService()), // Create new instance
+        Provider<StorageService>(create: (_) => StorageService()), // Create new instance
       ],
       child: const MyApp(),
     ),

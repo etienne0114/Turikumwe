@@ -1,4 +1,3 @@
-// lib/services/database_service.dart
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:turikumwe/models/user.dart';
@@ -24,7 +23,7 @@ class DatabaseService {
 
   Future<Database> initDatabase() async {
     String path = join(await getDatabasesPath(), 'turikumwe.db');
-
+    
     return await openDatabase(
       path,
       version: 2, // Increment from 1 to 2 to trigger upgrade
@@ -33,8 +32,7 @@ class DatabaseService {
     );
   }
 
-  Future<void> _upgradeDatabase(
-      Database db, int oldVersion, int newVersion) async {
+  Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       // Add missing columns
       await db.execute('ALTER TABLE events ADD COLUMN district TEXT');
@@ -121,22 +119,22 @@ class DatabaseService {
     // Events table
     await db.execute('''
       CREATE TABLE events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      description TEXT NOT NULL,
-      date TEXT NOT NULL,
-      location TEXT NOT NULL,
-      image TEXT,
-      groupId INTEGER,
-      organizerId INTEGER NOT NULL,
-      attendeesIds TEXT,
-      district TEXT,
-      category TEXT,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL,
-      FOREIGN KEY (groupId) REFERENCES groups (id),
-      FOREIGN KEY (organizerId) REFERENCES users (id)
-    )
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        date TEXT NOT NULL,
+        location TEXT NOT NULL,
+        image TEXT,
+        groupId INTEGER,
+        organizerId INTEGER NOT NULL,
+        attendeesIds TEXT,
+        district TEXT,
+        category TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        FOREIGN KEY (groupId) REFERENCES groups (id),
+        FOREIGN KEY (organizerId) REFERENCES users (id)
+      )
     ''');
 
     // Stories table
@@ -296,6 +294,249 @@ class DatabaseService {
       orderBy: 'name ASC',
     );
 
+    return List.generate(maps.length, (i) {
+      return Group.fromMap(maps[i]);
+    });
+  }
+
+  // Get a specific group by ID
+  Future<Group?> getGroupById(int id) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'groups',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    
+    if (maps.isNotEmpty) {
+      return Group.fromMap(maps.first);
+    }
+    return null;
+  }
+  
+  // Update a group
+  Future<bool> updateGroup(Map<String, dynamic> group) async {
+    final db = await database;
+    final result = await db.update(
+      'groups',
+      group,
+      where: 'id = ?',
+      whereArgs: [group['id']],
+    );
+    
+    return result > 0;
+  }
+  
+  // Delete a group
+  Future<bool> deleteGroup(int id) async {
+    final db = await database;
+    
+    // Start transaction to delete all related data
+    await db.transaction((txn) async {
+      // Delete group members
+      await txn.delete(
+        'group_members',
+        where: 'groupId = ?',
+        whereArgs: [id],
+      );
+      
+      // Delete group posts
+      await txn.delete(
+        'posts',
+        where: 'groupId = ?',
+        whereArgs: [id],
+      );
+      
+      // Delete group messages
+      await txn.delete(
+        'messages',
+        where: 'groupId = ?',
+        whereArgs: [id],
+      );
+      
+      // Delete group events
+      await txn.delete(
+        'events',
+        where: 'groupId = ?',
+        whereArgs: [id],
+      );
+      
+      // Finally delete the group itself
+      await txn.delete(
+        'groups',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    });
+    
+    return true;
+  }
+  
+  // Add a member to a group
+  Future<int> addGroupMember(Map<String, dynamic> member) async {
+    final db = await database;
+    return await db.insert('group_members', member);
+  }
+  
+  // Get all members of a group
+  Future<List<Map<String, dynamic>>> getGroupMembers(int groupId) async {
+    final db = await database;
+    
+    // Join group_members with users to get user details
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+      SELECT gm.*, u.*
+      FROM group_members gm
+      JOIN users u ON gm.userId = u.id
+      WHERE gm.groupId = ?
+      ORDER BY gm.isAdmin DESC, u.name ASC
+    ''', [groupId]);
+    
+    // Convert to more usable format with User objects
+    return results.map((row) {
+      final user = User.fromMap({
+        'id': row['userId'],
+        'name': row['name'],
+        'email': row['email'],
+        'phoneNumber': row['phoneNumber'],
+        'district': row['district'],
+        'profilePicture': row['profilePicture'],
+        'bio': row['bio'],
+        'createdAt': row['createdAt'],
+        'updatedAt': row['updatedAt'],
+      });
+      
+      return {
+        'id': row['id'],
+        'groupId': row['groupId'],
+        'userId': row['userId'],
+        'isAdmin': row['isAdmin'],
+        'joinedAt': row['joinedAt'],
+        'user': user,
+      };
+    }).toList();
+  }
+  
+  // Check if a user is a member of a group
+  Future<Map<String, dynamic>?> getGroupMembership(int groupId, int userId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'group_members',
+      where: 'groupId = ? AND userId = ?',
+      whereArgs: [groupId, userId],
+    );
+    
+    if (maps.isNotEmpty) {
+      return maps.first;
+    }
+    return null;
+  }
+  
+  // Remove a member from a group
+  Future<int> removeGroupMember(int groupId, int userId) async {
+    final db = await database;
+    return await db.delete(
+      'group_members',
+      where: 'groupId = ? AND userId = ?',
+      whereArgs: [groupId, userId],
+    );
+  }
+  
+  // Update a member's role in a group
+  Future<int> updateGroupMemberRole(int groupId, int userId, bool isAdmin) async {
+    final db = await database;
+    return await db.update(
+      'group_members',
+      {'isAdmin': isAdmin ? 1 : 0},
+      where: 'groupId = ? AND userId = ?',
+      whereArgs: [groupId, userId],
+    );
+  }
+  
+  // Increment group members count
+  Future<Group?> incrementGroupMembersCount(int groupId) async {
+    final db = await database;
+    
+    // Get current group
+    final group = await getGroupById(groupId);
+    if (group == null) return null;
+    
+    // Increment members count
+    final newCount = group.membersCount + 1;
+    await db.update(
+      'groups',
+      {'membersCount': newCount},
+      where: 'id = ?',
+      whereArgs: [groupId],
+    );
+    
+    // Return updated group
+    return await getGroupById(groupId);
+  }
+  
+  // Decrement group members count
+  Future<Group?> decrementGroupMembersCount(int groupId) async {
+    final db = await database;
+    
+    // Get current group
+    final group = await getGroupById(groupId);
+    if (group == null) return null;
+    
+    // Ensure count doesn't go below 0
+    final newCount = group.membersCount > 0 ? group.membersCount - 1 : 0;
+    await db.update(
+      'groups',
+      {'membersCount': newCount},
+      where: 'id = ?',
+      whereArgs: [groupId],
+    );
+    
+    // Return updated group
+    return await getGroupById(groupId);
+  }
+  
+  // Get user's groups
+  Future<List<Group>> getUserGroups(int userId) async {
+    final db = await database;
+    
+    // Join group_members with groups to get groups where user is a member
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+      SELECT g.*
+      FROM groups g
+      JOIN group_members gm ON g.id = gm.groupId
+      WHERE gm.userId = ?
+      ORDER BY g.name ASC
+    ''', [userId]);
+    
+    return results.map((map) => Group.fromMap(map)).toList();
+  }
+  
+  // Get groups where user is admin
+  Future<List<Group>> getUserAdminGroups(int userId) async {
+    final db = await database;
+    
+    // Join group_members with groups to get groups where user is admin
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+      SELECT g.*
+      FROM groups g
+      JOIN group_members gm ON g.id = gm.groupId
+      WHERE gm.userId = ? AND gm.isAdmin = 1
+      ORDER BY g.name ASC
+    ''', [userId]);
+    
+    return results.map((map) => Group.fromMap(map)).toList();
+  }
+  
+  // Search groups by name or description
+  Future<List<Group>> searchGroups(String query) async {
+    final db = await database;
+    
+    final List<Map<String, dynamic>> maps = await db.query(
+      'groups',
+      where: 'name LIKE ? OR description LIKE ?',
+      whereArgs: ['%$query%', '%$query%'],
+      orderBy: 'name ASC',
+    );
+    
     return List.generate(maps.length, (i) {
       return Group.fromMap(maps[i]);
     });
