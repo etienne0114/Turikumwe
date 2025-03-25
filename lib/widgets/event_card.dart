@@ -1,6 +1,8 @@
+// lib/widgets/event_card.dart - Updated to navigate to event details
 import 'package:flutter/material.dart';
 import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/models/event.dart';
+import 'package:turikumwe/screens/event_detail_screen.dart'; // Import the detail screen
 import 'package:intl/intl.dart';
 
 class EventCard extends StatelessWidget {
@@ -29,6 +31,12 @@ class EventCard extends StatelessWidget {
       child: InkWell(
         onTap: () {
           // Navigate to event details
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => EventDetailScreen(event: event),
+            ),
+          );
         },
         borderRadius: BorderRadius.circular(12),
         child: Column(
@@ -90,9 +98,13 @@ class EventCard extends StatelessWidget {
                     children: [
                       const Icon(Icons.location_on, size: 16, color: Colors.grey),
                       const SizedBox(width: 4),
-                      Text(
-                        event.location,
-                        style: const TextStyle(color: Colors.grey),
+                      Expanded(
+                        child: Text(
+                          event.location,
+                          style: const TextStyle(color: Colors.grey),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
@@ -112,7 +124,13 @@ class EventCard extends StatelessWidget {
                       ),
                       TextButton(
                         onPressed: () {
-                          // Register for event
+                          // Navigate to event details
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => EventDetailScreen(event: event),
+                            ),
+                          );
                         },
                         child: const Text('Attend'),
                       ),
@@ -141,6 +159,12 @@ class EventCard extends StatelessWidget {
         child: InkWell(
           onTap: () {
             // Navigate to event details
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => EventDetailScreen(event: event),
+              ),
+            );
           },
           borderRadius: BorderRadius.circular(12),
           child: Column(
@@ -236,7 +260,13 @@ class EventCard extends StatelessWidget {
                         ),
                         TextButton(
                           onPressed: () {
-                            // Register for event
+                            // Navigate to event details
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => EventDetailScreen(event: event),
+                              ),
+                            );
                           },
                           style: TextButton.styleFrom(
                             padding: const EdgeInsets.symmetric(horizontal: 12),

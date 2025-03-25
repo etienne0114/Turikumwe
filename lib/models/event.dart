@@ -8,7 +8,11 @@ class Event {
   final String? image;
   final int? groupId;
   final int organizerId;
-  final List<int>? attendeesIds;
+  final String? attendeesIds;
+  final String? district;
+  final String? category;
+  final String? createdAt;
+  final String? updatedAt;
   
   Event({
     required this.id,
@@ -20,6 +24,10 @@ class Event {
     this.groupId,
     required this.organizerId,
     this.attendeesIds,
+    this.district,
+    this.category,
+    this.createdAt,
+    this.updatedAt,
   });
   
   Map<String, dynamic> toMap() {
@@ -32,7 +40,11 @@ class Event {
       'image': image,
       'groupId': groupId,
       'organizerId': organizerId,
-      'attendeesIds': attendeesIds?.join(','),
+      'attendeesIds': attendeesIds,
+      'district': district,
+      'category': category,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
     };
   }
   
@@ -46,7 +58,23 @@ class Event {
       image: map['image'],
       groupId: map['groupId'],
       organizerId: map['organizerId'],
-      attendeesIds: map['attendeesIds']?.split(',').map<int>((id) => int.parse(id)).toList(),
+      attendeesIds: map['attendeesIds'],
+      district: map['district'],
+      category: map['category'],
+      createdAt: map['createdAt'],
+      updatedAt: map['updatedAt'],
     );
+  }
+  
+  // Helper method to get attendees as a list of integers
+  List<int> getAttendeesList() {
+    if (attendeesIds == null || attendeesIds!.isEmpty) {
+      return [];
+    }
+    
+    return attendeesIds!
+        .split(',')
+        .map((idStr) => int.parse(idStr.trim()))
+        .toList();
   }
 }

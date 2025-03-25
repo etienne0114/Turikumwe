@@ -1,14 +1,16 @@
-// lib/screens/home_screen.dart
+// lib/screens/home_screen.dart - Update the bottom sheet to link to create event
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/constants/app_strings.dart';
+import 'package:turikumwe/screens/create_event_screen.dart'; // Import the create event screen
 import 'package:turikumwe/screens/events_screen.dart';
 import 'package:turikumwe/screens/groups_screen.dart';
 import 'package:turikumwe/screens/home_feed_screen.dart';
 import 'package:turikumwe/screens/messages_screen.dart';
 import 'package:turikumwe/screens/profile_screen.dart';
 import 'package:turikumwe/screens/stories_screen.dart';
+import 'package:turikumwe/services/auth_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -152,6 +154,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: () {
                     Navigator.pop(context);
                     // Navigate to create event screen
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CreateEventScreen(),
+                      ),
+                    ).then((value) {
+                      // If event was created successfully, show events tab
+                      if (value == true) {
+                        setState(() {
+                          _currentIndex = 2; // Switch to Events tab
+                        });
+                      }
+                    });
                   },
                 ),
                 ListTile(

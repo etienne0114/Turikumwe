@@ -1,7 +1,11 @@
-// lib/screens/events_screen.dart
+// lib/screens/events_screen.dart - Updated with Create Event functionality
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/models/event.dart';
+import 'package:turikumwe/screens/create_event_screen.dart'; // Import the create event screen
 import 'package:turikumwe/services/database_service.dart';
+import 'package:turikumwe/utils/dialog_utils.dart';
 import 'package:turikumwe/widgets/event_card.dart';
 
 class EventsScreen extends StatefulWidget {
@@ -44,17 +48,56 @@ class _EventsScreenState extends State<EventsScreen> {
         _isLoading = false;
       });
     } catch (e) {
+      print('Error loading events: $e');
       setState(() {
         _isLoading = false;
       });
     }
   }
 
+  // Function to navigate to create event screen
+  Future<void> _navigateToCreateEvent() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CreateEventScreen()),
+    );
+    
+    // If returned with a success result, reload events
+    if (result == true) {
+      _loadEvents();
+    }
+  }
+
+  // Apply filters to events
+  List<Event> _getFilteredEvents() {
+    final now = DateTime.now();
+    final endOfWeek = now.add(Duration(days: 7 - now.weekday + 1));
+    final endOfMonth = DateTime(now.year, now.month + 1, 0);
+    
+    switch (_selectedFilter) {
+      case 1: // This Week
+        return _upcomingEvents.where((event) {
+          return event.date.isBefore(endOfWeek);
+        }).toList();
+      case 2: // This Month
+        return _upcomingEvents.where((event) {
+          return event.date.isBefore(endOfMonth);
+        }).toList();
+      case 3: // My District (placeholder - would use user's district)
+        // In a real app, you'd filter by user's district
+        return _upcomingEvents.take(3).toList();
+      default: // All
+        return _upcomingEvents;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final filteredEvents = _getFilteredEvents();
+    
     return _isLoading
         ? const Center(child: CircularProgressIndicator())
-        : _upcomingEvents.isEmpty
+        : filteredEvents.isEmpty && _myEvents.isEmpty
             ? _buildEmptyState()
             : CustomScrollView(
                 slivers: [
@@ -76,7 +119,6 @@ class _EventsScreenState extends State<EventsScreen> {
                                   if (selected) {
                                     setState(() {
                                       _selectedFilter = index;
-                                      // TODO: Filter events based on selection
                                     });
                                   }
                                 },
@@ -121,34 +163,76 @@ class _EventsScreenState extends State<EventsScreen> {
                   ],
                   
                   // Upcoming events section
-                  const SliverToBoxAdapter(
+                  SliverToBoxAdapter(
                     child: Padding(
-                      padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      child: Text(
-                        'Upcoming Events',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Upcoming Events',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (filteredEvents.isEmpty)
+                            TextButton.icon(
+                              onPressed: _navigateToCreateEvent,
+                              icon: const Icon(Icons.add),
+                              label: const Text('Create'),
+                            ),
+                        ],
                       ),
                     ),
                   ),
-                  SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
+                  
+                  // Show filtered events or empty state
+                  filteredEvents.isEmpty
+                      ? SliverFillRemaining(
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.event_outlined,
+                                  size: 60,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'No events found for this filter',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton.icon(
+                                  onPressed: _navigateToCreateEvent,
+                                  icon: const Icon(Icons.add),
+                                  label: const Text('Create Event'),
+                                ),
+                              ],
+                            ),
                           ),
-                          child: EventCard(
-                            event: _upcomingEvents[index],
+                        )
+                      : SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                                child: EventCard(
+                                  event: filteredEvents[index],
+                                ),
+                              );
+                            },
+                            childCount: filteredEvents.length,
                           ),
-                        );
-                      },
-                      childCount: _upcomingEvents.length,
-                    ),
-                  ),
+                        ),
                 ],
               );
   }
@@ -179,9 +263,7 @@ class _EventsScreenState extends State<EventsScreen> {
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
-            onPressed: () {
-              // Navigate to create event
-            },
+            onPressed: _navigateToCreateEvent,
             icon: const Icon(Icons.add),
             label: const Text('Create Event'),
           ),

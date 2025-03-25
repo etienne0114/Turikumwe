@@ -12,8 +12,6 @@ export 'file_utils.dart';
 export 'image_utils.dart';
 export 'locale_utils.dart';
 export 'navigation_utils.dart';
-export 'notification_utils.dart';
 export 'permission_utils.dart';
-//export 'string_utils.dart';
 export 'theme_utils.dart';
 export 'validators.dart';
