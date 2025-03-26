@@ -1,3 +1,4 @@
+// lib/models/story.dart
 class Story {
   final int id;
   final int userId;
@@ -7,8 +8,6 @@ class Story {
   final String category;
   final DateTime createdAt;
   final int likesCount;
-  final String? userProfile;
-  final String? userName;
   
   Story({
     required this.id,
@@ -19,8 +18,6 @@ class Story {
     required this.category,
     required this.createdAt,
     this.likesCount = 0,
-    this.userProfile,
-    this.userName,
   });
   
   Map<String, dynamic> toMap() {
@@ -33,8 +30,6 @@ class Story {
       'category': category,
       'createdAt': createdAt.toIso8601String(),
       'likesCount': likesCount,
-      'userProfile': userProfile,
-      'userName': userName,
     };
   }
   
@@ -48,8 +43,6 @@ class Story {
       category: map['category'],
       createdAt: DateTime.parse(map['createdAt']),
       likesCount: map['likesCount'] ?? 0,
-      userProfile: map['userProfile'],
-      userName: map['userName'],
     );
   }
 }

@@ -1,87 +1,150 @@
+
+// lib/screens/stories_screen.dart
 import 'package:flutter/material.dart';
-import 'package:photo_view/photo_view.dart';
+import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/models/story.dart';
-import 'package:turikumwe/widgets/user_avatar.dart';
+import 'package:turikumwe/services/database_service.dart';
+import 'package:turikumwe/widgets/story_card.dart';
 
-class StoryDetailScreen extends StatelessWidget {
-  final Story story;
+class StoriesScreen extends StatefulWidget {
+  const StoriesScreen({Key? key}) : super(key: key);
 
-  const StoryDetailScreen({Key? key, required this.story}) : super(key: key);
+  @override
+  State<StoriesScreen> createState() => _StoriesScreenState();
+}
+
+class _StoriesScreenState extends State<StoriesScreen> {
+  List<Story> _stories = [];
+  bool _isLoading = true;
+  String _selectedCategory = 'All';
+  
+  final List<String> _categories = [
+    'All',
+    'Success',
+    'Innovation',
+    'Community',
+    'Education',
+    'Health',
+    'Agriculture',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStories();
+  }
+
+  Future<void> _loadStories() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final stories = await DatabaseService().getStories(
+        category: _selectedCategory == 'All' ? null : _selectedCategory,
+      );
+      
+      setState(() {
+        _stories = stories;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading stories: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Story Details'),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (story.images != null && story.images!.isNotEmpty)
-              SizedBox(
-                height: 300,
-                child: PageView.builder(
-                  itemCount: story.images!.length,
-                  itemBuilder: (context, index) {
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => Scaffold(
-                              body: PhotoView(
-                                imageProvider: NetworkImage(story.images![index]),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                      child: Image.network(
-                        story.images![index],
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: Colors.grey[200],
-                          child: const Icon(Icons.broken_image),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            const SizedBox(height: 16),
-            Chip(
-              label: Text(story.category),
+    return Column(
+      children: [
+        // Category filter
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: SizedBox(
+            height: 40,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: _categories.length,
+              itemBuilder: (context, index) {
+                final category = _categories[index];
+                final isSelected = category == _selectedCategory;
+                
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(category),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      if (selected) {
+                        setState(() {
+                          _selectedCategory = category;
+                          // Reload stories with the new filter
+                          _loadStories();
+                        });
+                      }
+                    },
+                  ),
+                );
+              },
             ),
-            const SizedBox(height: 16),
-            Text(
-              story.title,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                UserAvatar(
-                  imageUrl: story.userProfile,
-                  radius: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  story.userName ?? 'Anonymous',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const Spacer(),
-                Text(
-                  '${story.likesCount} likes',
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(story.content),
-          ],
+          ),
         ),
+        
+        // Stories list
+        Expanded(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _stories.isEmpty
+                  ? _buildEmptyState()
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _stories.length,
+                      itemBuilder: (context, index) {
+                        return StoryCard(story: _stories[index]);
+                      },
+                    ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.auto_stories_outlined,
+            size: 80,
+            color: Colors.grey,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'No stories yet',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Share your success stories to inspire others',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: () {
+              // Navigate to create story
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('Share Your Story'),
+          ),
+        ],
       ),
     );
   }
