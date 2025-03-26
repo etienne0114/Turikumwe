@@ -3,8 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:turikumwe/constants/app_theme.dart';
 import 'package:turikumwe/screens/splash_screen.dart';
 import 'package:turikumwe/services/service_locator.dart';
-import 'package:turikumwe/services/database_service.dart'; // Import DatabaseService
-import 'package:turikumwe/services/storage_service.dart'; // Import StorageService
+import 'package:turikumwe/services/database_service.dart';
+import 'package:turikumwe/services/storage_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,8 +16,8 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ServiceLocator.auth),
-        Provider<DatabaseService>(create: (_) => DatabaseService()), // Create new instance
-        Provider<StorageService>(create: (_) => StorageService()), // Create new instance
+        Provider<DatabaseService>(create: (_) => DatabaseService()),
+        Provider<StorageService>(create: (_) => StorageService()),
       ],
       child: const MyApp(),
     ),
