@@ -1,3 +1,4 @@
+// lib/services/service_locator.dart
 import 'package:turikumwe/services/auth_service.dart';
 import 'package:turikumwe/services/database_service.dart';
 import 'package:turikumwe/services/storage_service.dart';
@@ -14,6 +15,7 @@ class ServiceLocator {
   static Future<void> init() async {
     // Initialize database first
     await _databaseService.initDatabase();
+     await _authService.init();
     
     // Other initializations can be added here
     // await _authService.initialize();

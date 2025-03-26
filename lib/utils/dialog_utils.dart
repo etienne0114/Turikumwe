@@ -38,7 +38,7 @@ class DialogUtils {
     required String title,
     required String message,
     String confirmText = 'Yes',
-    String cancelText = 'No',
+    String cancelText = 'No', required bool isDangerous,
   }) async {
     final result = await showDialog<bool>(
       context: context,

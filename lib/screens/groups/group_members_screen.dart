@@ -157,7 +157,7 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
       title: 'Remove Member',
       message: 'Are you sure you want to remove this member from the group?',
       confirmText: 'Remove',
-      cancelText: 'Cancel',
+      cancelText: 'Cancel', isDangerous: false,
     );
     
     if (!confirm) return;

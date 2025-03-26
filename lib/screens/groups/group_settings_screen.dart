@@ -1,3 +1,4 @@
+// lib/screens/groups/group_members_screen.dart
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -115,7 +116,7 @@ class _GroupSettingsScreenState extends State<GroupSettingsScreen> {
       title: 'Delete Group',
       message: 'This will permanently delete the group and all its content',
       confirmText: 'Delete',
-      cancelText: 'Cancel',
+      cancelText: 'Cancel', isDangerous: true,
     );
 
     if (!confirm || !mounted) return;

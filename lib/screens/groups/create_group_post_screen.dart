@@ -172,144 +172,195 @@ class _CreateGroupPostScreenState extends State<CreateGroupPostScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Group name indicator
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.group,
-                    size: 16,
-                    color: AppColors.primary,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Posting to ${widget.group.name}',
-                    style: TextStyle(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            
-            // User info and post content
-            Row(
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 80), // Extra padding at bottom for button
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundImage: currentUser?.profilePicture != null
-                      ? NetworkImage(currentUser!.profilePicture!)
-                      : null,
-                  child: currentUser?.profilePicture == null
-                      ? const Icon(Icons.person)
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _contentController,
-                    decoration: const InputDecoration(
-                      hintText: 'What\'s on your mind?',
-                      border: InputBorder.none,
-                    ),
-                    maxLines: null,
-                    keyboardType: TextInputType.multiline,
+                // Group name indicator
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                ),
-              ],
-            ),
-            
-            // Selected images grid
-            if (_selectedImages.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              GridView.count(
-                crossAxisCount: 3,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                children: List.generate(_selectedImages.length, (index) {
-                  return Stack(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          image: DecorationImage(
-                            image: FileImage(_selectedImages[index]),
-                            fit: BoxFit.cover,
-                          ),
-                        ),
+                      Icon(
+                        Icons.group,
+                        size: 16,
+                        color: AppColors.primary,
                       ),
-                      Positioned(
-                        top: 0,
-                        right: 0,
-                        child: GestureDetector(
-                          onTap: () => _removeImage(index),
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Icon(
-                              Icons.close,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                          ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Posting to ${widget.group.name}',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
-                  );
-                }),
-              ),
-            ],
-            
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 8),
-            
-            // Add to post options
-            const Text(
-              'Add to your post',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                _buildAddToPostButton(
-                  icon: Icons.photo_library,
-                  color: Colors.green,
-                  label: 'Photos',
-                  onTap: _pickImage,
+                  ),
                 ),
-                _buildAddToPostButton(
-                  icon: Icons.camera_alt,
-                  color: Colors.blue,
-                  label: 'Camera',
-                  onTap: _takePhoto,
+                const SizedBox(height: 16),
+                
+                // User info and post content
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundImage: currentUser?.profilePicture != null
+                          ? NetworkImage(currentUser!.profilePicture!)
+                          : null,
+                      child: currentUser?.profilePicture == null
+                          ? const Icon(Icons.person)
+                          : null,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _contentController,
+                        decoration: const InputDecoration(
+                          hintText: 'What\'s on your mind?',
+                          border: InputBorder.none,
+                        ),
+                        maxLines: null,
+                        keyboardType: TextInputType.multiline,
+                      ),
+                    ),
+                  ],
                 ),
-                // Add more options as needed
+                
+                // Selected images grid
+                if (_selectedImages.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  GridView.count(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: List.generate(_selectedImages.length, (index) {
+                      return Stack(
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              image: DecorationImage(
+                                image: FileImage(_selectedImages[index]),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: () => _removeImage(index),
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Icon(
+                                  Icons.close,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
+                  ),
+                ],
+                
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 8),
+                
+                // Add to post options
+                const Text(
+                  'Add to your post',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _buildAddToPostButton(
+                      icon: Icons.photo_library,
+                      color: Colors.green,
+                      label: 'Photos',
+                      onTap: _pickImage,
+                    ),
+                    _buildAddToPostButton(
+                      icon: Icons.camera_alt,
+                      color: const Color.fromARGB(255, 1, 120, 232),
+                      label: 'Camera',
+                      onTap: _takePhoto,
+                    ),
+                    // Add more options as needed
+                  ],
+                ),
               ],
             ),
-          ],
-        ),
+          ),
+          // Floating post button at bottom
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _createPost,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  elevation: 0,
+                ),
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text(
+                        'POST',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -2,6 +2,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:turikumwe/models/group.dart';
+import 'package:turikumwe/screens/groups/create_group_screen.dart';
 import 'package:turikumwe/services/database_service.dart';
 import 'package:turikumwe/widgets/group_card.dart';
 
@@ -12,7 +13,8 @@ class GroupsScreen extends StatefulWidget {
   State<GroupsScreen> createState() => _GroupsScreenState();
 }
 
-class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderStateMixin {
+class _GroupsScreenState extends State<GroupsScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   List<Group> _myGroups = [];
   List<Group> _discoverGroups = [];
@@ -28,7 +30,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     'Technology',
     'Youth',
   ];
-  
+
   String _selectedCategory = 'All';
 
   @override
@@ -52,7 +54,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
     try {
       // In a real app, you would filter groups based on user membership
       final allGroups = await DatabaseService().getGroups();
-      
+
       // For demo purposes, we'll just split them
       setState(() {
         _myGroups = allGroups.take(3).toList();
@@ -95,7 +97,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
                 itemBuilder: (context, index) {
                   final category = _categories[index];
                   final isSelected = category == _selectedCategory;
-                  
+
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: ChoiceChip(
@@ -131,7 +133,7 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
                             return GroupCard(group: _myGroups[index]);
                           },
                         ),
-              
+
               // Discover Tab
               _isLoading
                   ? const Center(child: CircularProgressIndicator())
@@ -139,7 +141,8 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
                       ? _buildEmptyDiscoverState()
                       : GridView.builder(
                           padding: const EdgeInsets.all(16),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
                             childAspectRatio: 0.8,
                             crossAxisSpacing: 10,
@@ -223,7 +226,10 @@ class _GroupsScreenState extends State<GroupsScreen> with SingleTickerProviderSt
           const SizedBox(height: 20),
           ElevatedButton.icon(
             onPressed: () {
-              // Navigate to create group
+              Navigator.push(
+  context,
+  MaterialPageRoute(builder: (context) => CreateGroupScreen()),
+);
             },
             icon: const Icon(Icons.add),
             label: const Text('Create Group'),

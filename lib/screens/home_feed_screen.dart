@@ -1,8 +1,11 @@
 // lib/screens/home_feed_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/models/post.dart';
+import 'package:turikumwe/services/auth_service.dart';
 import 'package:turikumwe/services/database_service.dart';
-import 'package:turikumwe/widgets/post_card.dart';
+import 'package:turikumwe/widgets/group_post_card_home.dart';
 
 class HomeFeedScreen extends StatefulWidget {
   const HomeFeedScreen({Key? key}) : super(key: key);
@@ -27,12 +30,42 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
     });
 
     try {
-      final posts = await DatabaseService().getPosts();
+      final databaseService =
+          Provider.of<DatabaseService>(context, listen: false);
+      final currentUser =
+          Provider.of<AuthService>(context, listen: false).currentUser;
+
+      List<Post> posts = [];
+
+      // If user is logged in, get posts from their groups too
+      if (currentUser != null) {
+        // Get user's groups
+        final userGroups = await databaseService.getUserGroups(currentUser.id);
+
+        // Get posts from those groups
+        for (final group in userGroups) {
+          final groupPosts = await databaseService.getPosts(groupId: group.id);
+          posts.addAll(groupPosts);
+        }
+
+        // Also get general posts
+        final generalPosts = await databaseService.getPosts();
+        posts.addAll(generalPosts.where((post) => post.groupId == null));
+      } else {
+        // Just get all posts if not logged in
+        posts = await databaseService.getPosts();
+      }
+
+      // Sort by date (newest first)
+      posts.sort((a, b) =>
+          DateTime.parse(b.createdAt).compareTo(DateTime.parse(a.createdAt)));
+
       setState(() {
         _posts = posts;
         _isLoading = false;
       });
     } catch (e) {
+      print('Error loading posts: $e');
       setState(() {
         _isLoading = false;
       });
@@ -51,7 +84,11 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                   padding: const EdgeInsets.all(10),
                   itemCount: _posts.length,
                   itemBuilder: (context, index) {
-                    return PostCard(post: _posts[index]);
+                    // Use the enhanced GroupPostCardHome for better display
+                    return GroupPostCardHome(
+                      post: _posts[index],
+                      onPostUpdated: _loadPosts,
+                    );
                   },
                 ),
     );
@@ -88,6 +125,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
             },
             icon: const Icon(Icons.add),
             label: const Text('Create Post'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
           ),
         ],
       ),

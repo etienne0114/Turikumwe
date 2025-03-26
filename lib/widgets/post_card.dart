@@ -70,7 +70,8 @@ class _PostCardState extends State<PostCard> {
         style: TextStyle(fontWeight: FontWeight.bold),
       ),
       subtitle: Text(
-        timeago.format(widget.post.createdAt),
+        // Convert string to DateTime before using timeago
+        timeago.format(DateTime.parse(widget.post.createdAt)),
         style: const TextStyle(fontSize: 12),
       ),
       trailing: IconButton(
@@ -125,21 +126,36 @@ class _PostCardState extends State<PostCard> {
   }
 
   Widget _buildImages() {
+    // Split the images string into a list if it's a comma-separated string
+    List<String> imagesList = [];
+    if (widget.post.images != null) {
+      imagesList = widget.post.images!.split(',');
+    }
+
     return Container(
       height: 200,
       margin: const EdgeInsets.symmetric(vertical: 12),
       child: PageView.builder(
-        itemCount: widget.post.images!.length,
+        itemCount: imagesList.length,
         itemBuilder: (context, index) {
           return Container(
             margin: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
+              // Use NetworkImage instead of AssetImage for URLs
               image: DecorationImage(
-                image: AssetImage(widget.post.images![index]),
+                image: NetworkImage(imagesList[index].trim()),
                 fit: BoxFit.cover,
+                // Handle image loading errors
+                onError: (exception, stackTrace) {
+                  print('Error loading image: $exception');
+                },
               ),
             ),
+            // Fallback if image fails to load
+            child: imagesList[index].isEmpty
+                ? const Center(child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey))
+                : null,
           );
         },
       ),

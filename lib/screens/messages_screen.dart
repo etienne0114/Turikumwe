@@ -11,10 +11,11 @@ class MessagesScreen extends StatefulWidget {
   State<MessagesScreen> createState() => _MessagesScreenState();
 }
 
-class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProviderStateMixin {
+class _MessagesScreenState extends State<MessagesScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final bool _isLoading = false;
-  
+
   // Dummy data for chat previews
   final List<Map<String, dynamic>> _directChats = [
     {
@@ -42,7 +43,7 @@ class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProvid
       'unread': 0,
     },
   ];
-  
+
   final List<Map<String, dynamic>> _groupChats = [
     {
       'id': 1,
@@ -94,7 +95,7 @@ class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProvid
             children: [
               // Direct Messages Tab
               _buildChatList(_directChats, false),
-              
+
               // Group Chats Tab
               _buildChatList(_groupChats, true),
             ],
@@ -124,9 +125,8 @@ class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProvid
       leading: CircleAvatar(
         backgroundImage: AssetImage(chat['avatar']),
         backgroundColor: isGroup ? AppColors.primary.withOpacity(0.2) : null,
-        child: isGroup
-            ? const Icon(Icons.group, color: AppColors.primary)
-            : null,
+        child:
+            isGroup ? const Icon(Icons.group, color: AppColors.primary) : null,
       ),
       title: Text(
         chat['name'],
@@ -194,9 +194,7 @@ class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProvid
           ),
           const SizedBox(height: 16),
           Text(
-            isGroup
-                ? 'No group chats yet'
-                : 'No messages yet',
+            isGroup ? 'No group chats yet' : 'No messages yet',
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -212,7 +210,7 @@ class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProvid
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
-                   onPressed: () {
+            onPressed: () {
               if (isGroup) {
                 // Navigate to groups screen
                 Navigator.popUntil(context, ModalRoute.withName('/'));

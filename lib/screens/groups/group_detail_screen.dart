@@ -1,3 +1,4 @@
+// lib/screens/groups/group_detail_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:turikumwe/constants/app_colors.dart';
@@ -131,7 +132,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
       title: 'Leave Group',
       message: 'Are you sure you want to leave this group?',
       confirmText: 'Leave',
-      cancelText: 'Cancel',
+      cancelText: 'Cancel', isDangerous: false,
     );
 
     if (!confirm) return;

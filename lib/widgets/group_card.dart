@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/models/group.dart';
+import 'package:turikumwe/screens/groups/group_home_screen.dart';
 
 class GroupCard extends StatelessWidget {
   final Group group;
@@ -57,7 +58,7 @@ class GroupCard extends StatelessWidget {
                     : null,
               ),
               const SizedBox(width: 16),
-              
+
               // Group info
               Expanded(
                 child: Column(
@@ -74,7 +75,8 @@ class GroupCard extends StatelessWidget {
                     if (group.district != null) ...[
                       Row(
                         children: [
-                          const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                          const Icon(Icons.location_on,
+                              size: 16, color: Colors.grey),
                           const SizedBox(width: 4),
                           Text(
                             group.district!,
@@ -97,17 +99,21 @@ class GroupCard extends StatelessWidget {
                   ],
                 ),
               ),
-              
+
               // Join button
               ElevatedButton(
                 onPressed: () {
-                  // Join group
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => GroupHomeScreen(group: group)),
+                  );
                 },
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 ),
                 child: const Text('Join'),
               ),
@@ -137,7 +143,8 @@ class GroupCard extends StatelessWidget {
               child: Container(
                 decoration: BoxDecoration(
                   color: AppColors.primary.withOpacity(0.1),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(12)),
                   image: group.image != null
                       ? DecorationImage(
                           image: AssetImage(group.image!),
@@ -156,7 +163,7 @@ class GroupCard extends StatelessWidget {
                     : null,
               ),
             ),
-            
+
             // Group info
             Padding(
               padding: const EdgeInsets.all(12),
@@ -188,7 +195,8 @@ class GroupCard extends StatelessWidget {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(30),
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
                       ),
                       child: const Text('Join'),
                     ),

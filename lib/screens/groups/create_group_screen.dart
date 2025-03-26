@@ -6,6 +6,7 @@ import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/models/group.dart';
 import 'package:turikumwe/services/auth_service.dart';
 import 'package:turikumwe/services/database_service.dart';
+import 'package:turikumwe/services/service_locator.dart';
 import 'package:turikumwe/utils/dialog_utils.dart';
 import 'dart:io';
 
@@ -41,12 +42,36 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   ];
 
   final List<String> _rwandanDistricts = [
-    'Bugesera', 'Burera', 'Gakenke', 'Gasabo', 'Gatsibo',
-    'Gicumbi', 'Gisagara', 'Huye', 'Kamonyi', 'Karongi',
-    'Kayonza', 'Kicukiro', 'Kirehe', 'Muhanga', 'Musanze',
-    'Ngoma', 'Ngororero', 'Nyabihu', 'Nyagatare', 'Nyamagabe',
-    'Nyamasheke', 'Nyanza', 'Nyarugenge', 'Nyaruguru', 'Rubavu',
-    'Ruhango', 'Rulindo', 'Rusizi', 'Rutsiro', 'Rwamagana',
+    'Bugesera',
+    'Burera',
+    'Gakenke',
+    'Gasabo',
+    'Gatsibo',
+    'Gicumbi',
+    'Gisagara',
+    'Huye',
+    'Kamonyi',
+    'Karongi',
+    'Kayonza',
+    'Kicukiro',
+    'Kirehe',
+    'Muhanga',
+    'Musanze',
+    'Ngoma',
+    'Ngororero',
+    'Nyabihu',
+    'Nyagatare',
+    'Nyamagabe',
+    'Nyamasheke',
+    'Nyanza',
+    'Nyarugenge',
+    'Nyaruguru',
+    'Rubavu',
+    'Ruhango',
+    'Rulindo',
+    'Rusizi',
+    'Rutsiro',
+    'Rwamagana',
   ];
 
   @override
@@ -64,7 +89,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
       maxWidth: 800,
       imageQuality: 85,
     );
-    
+
     if (image != null) {
       setState(() {
         _groupImage = File(image.path);
@@ -87,21 +112,18 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
       });
 
       try {
-        final currentUser = Provider.of<AuthService>(context, listen: false).currentUser;
-        if (currentUser == null) {
-          DialogUtils.showErrorSnackBar(
-            context,
-            message: 'You need to be logged in to create a group',
-          );
-          setState(() {
-            _isLoading = false;
-          });
-          return;
-        }
+        final currentUser =
+            Provider.of<AuthService>(context, listen: false).currentUser;
+        if (currentUser == null) return;
+
+         String? imageUrl;
+      if (_groupImage != null) {
+        imageUrl = await ServiceLocator.storage.uploadImage(_groupImage!);
+      }
 
         // In a real app, you would upload the image to storage
         // For this demo, we'll just store a placeholder or null
-        
+
         // Create a new group
         final groupMap = {
           'name': _nameController.text.trim(),
@@ -115,7 +137,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
         };
 
         print("Creating group with data: $groupMap"); // Debug log
-        
+
         // Insert the group and get its ID
         final groupId = await DatabaseService().insertGroup(groupMap);
 
@@ -127,9 +149,9 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
             'isAdmin': 1, // Creator is admin
             'joinedAt': DateTime.now().toIso8601String(),
           };
-          
+
           await DatabaseService().addGroupMember(memberMap);
-          
+
           setState(() {
             _isLoading = false;
           });
@@ -139,7 +161,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
               context,
               message: 'Group created successfully!',
             );
-            
+
             // Navigate back to previous screen with success result
             Navigator.pop(context, true);
           }
@@ -147,7 +169,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
           setState(() {
             _isLoading = false;
           });
-          
+
           if (mounted) {
             DialogUtils.showErrorSnackBar(
               context,
@@ -160,7 +182,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
         setState(() {
           _isLoading = false;
         });
-        
+
         if (mounted) {
           DialogUtils.showErrorSnackBar(
             context,
@@ -206,7 +228,8 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                   child: CircleAvatar(
                     radius: 60,
                     backgroundColor: Colors.grey[200],
-                    backgroundImage: _groupImage != null ? FileImage(_groupImage!) : null,
+                    backgroundImage:
+                        _groupImage != null ? FileImage(_groupImage!) : null,
                     child: _groupImage == null
                         ? Icon(
                             Icons.add_a_photo,
@@ -225,7 +248,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              
+
               // Group Name
               TextFormField(
                 controller: _nameController,
@@ -242,7 +265,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                 },
               ),
               const SizedBox(height: 16),
-              
+
               // Category Dropdown
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(
@@ -265,7 +288,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                 },
               ),
               const SizedBox(height: 16),
-              
+
               // District Dropdown
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(
@@ -288,7 +311,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                 },
               ),
               const SizedBox(height: 16),
-              
+
               // Group Privacy
               Card(
                 elevation: 0,
@@ -348,7 +371,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              
+
               // Description
               TextFormField(
                 controller: _descriptionController,
@@ -367,7 +390,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                 },
               ),
               const SizedBox(height: 24),
-              
+
               // Create Button
               SizedBox(
                 width: double.infinity,
@@ -383,7 +406,8 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                   ),
                   child: _isLoading
                       ? const CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
                         )
                       : const Text(
                           'Create Group',

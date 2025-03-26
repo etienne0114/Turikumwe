@@ -7,8 +7,9 @@ class Group {
   final String category;
   final String? district;
   final int membersCount;
+  final bool isPublic; // Added this field
   final DateTime createdAt;
-  
+    
   Group({
     required this.id,
     required this.name,
@@ -17,6 +18,7 @@ class Group {
     required this.category,
     this.district,
     this.membersCount = 0,
+    this.isPublic = true, // Default to true
     required this.createdAt,
   });
   
@@ -29,6 +31,7 @@ class Group {
       'category': category,
       'district': district,
       'membersCount': membersCount,
+      'isPublic': isPublic ? 1 : 0, // Convert bool to int for SQLite
       'createdAt': createdAt.toIso8601String(),
     };
   }
@@ -42,6 +45,7 @@ class Group {
       category: map['category'],
       district: map['district'],
       membersCount: map['membersCount'] ?? 0,
+      isPublic: map['isPublic'] == null ? true : map['isPublic'] == 1, // Convert int to bool with default
       createdAt: DateTime.parse(map['createdAt']),
     );
   }
