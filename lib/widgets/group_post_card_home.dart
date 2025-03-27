@@ -212,7 +212,7 @@ class _GroupPostCardHomeState extends State<GroupPostCardHome> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.group,
                       size: 16,
                       color: AppColors.primary,
@@ -220,7 +220,7 @@ class _GroupPostCardHomeState extends State<GroupPostCardHome> {
                     const SizedBox(width: 4),
                     Text(
                       'Posted in ${_group!.name}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.primary,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
