@@ -189,7 +189,7 @@ class _CreateGroupPostScreenState extends State<CreateGroupPostScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.group,
                         size: 16,
                         color: AppColors.primary,
@@ -197,7 +197,7 @@ class _CreateGroupPostScreenState extends State<CreateGroupPostScreen> {
                       const SizedBox(width: 4),
                       Text(
                         'Posting to ${widget.group.name}',
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: AppColors.primary,
                           fontWeight: FontWeight.bold,
                         ),

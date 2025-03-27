@@ -240,7 +240,7 @@ class _CreateGroupPostScreenState extends State<CreateGroupPostScreen> {
                                 ),
                                 child: Text(
                                   'Posting to ${widget.group.name}',
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     color: AppColors.primary,
                                     fontSize: 12,
                                   ),

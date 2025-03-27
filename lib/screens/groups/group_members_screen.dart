@@ -230,7 +230,7 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
                                 color: AppColors.primary.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: Text(
+                              child: const Text(
                                 'Admin',
                                 style: TextStyle(
                                   fontSize: 12,

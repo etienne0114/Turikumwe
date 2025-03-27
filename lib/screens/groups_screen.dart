@@ -228,7 +228,7 @@ class _GroupsScreenState extends State<GroupsScreen>
             onPressed: () {
               Navigator.push(
   context,
-  MaterialPageRoute(builder: (context) => CreateGroupScreen()),
+  MaterialPageRoute(builder: (context) => const CreateGroupScreen()),
 );
             },
             icon: const Icon(Icons.add),

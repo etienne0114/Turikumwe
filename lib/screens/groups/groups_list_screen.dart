@@ -359,7 +359,7 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
                           : null,
                     ),
                     child: group.image == null
-                        ? Center(
+                        ? const Center(
                             child: Icon(
                               Icons.group,
                               size: 30,

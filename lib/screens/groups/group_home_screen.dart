@@ -368,7 +368,7 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
             : null,
       ),
       child: _group.image == null
-          ? Center(
+          ? const Center(
               child: Icon(
                 Icons.group,
                 size: 40,
@@ -404,7 +404,7 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
                 ),
                 child: Text(
                   _group.category,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: AppColors.primary,
                     fontSize: 12,
                   ),

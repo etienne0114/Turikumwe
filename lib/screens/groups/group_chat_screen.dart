@@ -25,7 +25,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   final ScrollController _scrollController = ScrollController();
   
   List<Message> _messages = [];
-  Map<int, User> _users = {}; // Cache of users by ID
+  final Map<int, User> _users = {}; // Cache of users by ID
   bool _isLoading = true;
   User? _currentUser;
   Timer? _refreshTimer;
@@ -136,7 +136,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               backgroundColor: AppColors.primary.withOpacity(0.1),
               backgroundImage: widget.group.image != null ? NetworkImage(widget.group.image!) : null,
               child: widget.group.image == null
-                  ? Icon(Icons.group, size: 16, color: AppColors.primary)
+                  ? const Icon(Icons.group, size: 16, color: AppColors.primary)
                   : null,
             ),
             const SizedBox(width: 8),
@@ -245,7 +245,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         ),
                       ),
                       IconButton(
-                        icon: Icon(
+                        icon: const Icon(
                           Icons.send,
                           color: AppColors.primary,
                         ),

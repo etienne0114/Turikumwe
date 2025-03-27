@@ -42,7 +42,7 @@ class DatabaseService {
       print("Database has been reset successfully");
     } catch (e) {
       print("Error resetting database: $e");
-      throw e;
+      rethrow;
     }
   }
 

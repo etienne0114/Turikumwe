@@ -344,7 +344,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
             : null,
       ),
       child: _group.image == null
-          ? Center(
+          ? const Center(
               child: Icon(
                 Icons.group,
                 size: 40,

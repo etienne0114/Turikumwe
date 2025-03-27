@@ -531,7 +531,7 @@ class _GroupPostCardState extends State<GroupPostCard> {
                   ),
                 )
               : IconButton(
-                  icon: Icon(Icons.send, color: AppColors.primary),
+                  icon: const Icon(Icons.send, color: AppColors.primary),
                   onPressed: _postComment,
                 ),
         ],
