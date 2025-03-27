@@ -192,7 +192,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 SizedBox(height: 8),
-                Text('© 2023 Turikumwe. All rights reserved.'),
+                Text('© 2025 Turikumwe. All rights reserved.'),
               ],
             ),
           ),

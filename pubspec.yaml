@@ -40,8 +40,20 @@ dependencies:
   crypto: ^3.0.3
   share_plus: ^7.0.2
   dio: ^5.3.2   
-  mime: ^1.0.4  
+  mime: ^1.0.4
   
+  # Use git dependency to avoid platform reference issues
+  file_picker:
+    git:
+      url: https://github.com/miguelpruivo/flutter_file_picker.git
+      ref: master
+
+dependency_overrides:
+  # Override to fix file_picker platform issues
+  file_picker:
+    git:
+      url: https://github.com/miguelpruivo/flutter_file_picker.git
+      ref: master
 
 dev_dependencies:
   flutter_test:

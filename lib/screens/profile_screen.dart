@@ -2,8 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:turikumwe/constants/app_colors.dart';
+import 'package:turikumwe/models/event.dart';
+import 'package:turikumwe/models/group.dart';
 import 'package:turikumwe/models/post.dart';
 import 'package:turikumwe/screens/auth/login_screen.dart';
+import 'package:turikumwe/screens/groups/groups_list_screen.dart';
 import 'package:turikumwe/services/auth_service.dart';
 import 'package:turikumwe/services/database_service.dart';
 import 'package:turikumwe/widgets/post_card.dart';
@@ -20,24 +23,27 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
+class _ProfileScreenState extends State<ProfileScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isLoading = true;
   List<Post> _userPosts = [];
-  
+  List<Group> _userGroups = [];
+  List<Event> _userEvents = [];
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _loadUserData();
   }
-  
+
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
   }
-  
+
   Future<void> _loadUserData() async {
     setState(() {
       _isLoading = true;
@@ -45,11 +51,12 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
     try {
       // Get the user's posts
-      final currentUser = Provider.of<AuthService>(context, listen: false).currentUser;
+      final currentUser =
+          Provider.of<AuthService>(context, listen: false).currentUser;
       if (currentUser != null) {
         final userId = widget.userId ?? currentUser.id;
         final posts = await DatabaseService().getPosts(userId: userId);
-        
+
         setState(() {
           _userPosts = posts;
           _isLoading = false;
@@ -65,7 +72,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
   void _logout() async {
     await Provider.of<AuthService>(context, listen: false).logout();
-    
+
     if (mounted) {
       Navigator.pushAndRemoveUntil(
         context,
@@ -78,8 +85,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   @override
   Widget build(BuildContext context) {
     final currentUser = Provider.of<AuthService>(context).currentUser;
-    final bool isCurrentUser = widget.userId == null || (currentUser != null && widget.userId == currentUser.id);
-    
+    final bool isCurrentUser = widget.userId == null ||
+        (currentUser != null && widget.userId == currentUser.id);
+
     if (currentUser == null) {
       return const Scaffold(
         body: Center(
@@ -159,10 +167,10 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                             return PostCard(post: _userPosts[index]);
                           },
                         ),
-                  
+
                   // Groups Tab
                   _buildEmptyGroups(),
-                  
+
                   // Events Tab
                   _buildEmptyEvents(),
                 ],
@@ -191,7 +199,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                 : null,
           ),
           const SizedBox(height: 16),
-          
+
           // Name
           Text(
             user.name,
@@ -201,7 +209,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             ),
           ),
           const SizedBox(height: 8),
-          
+
           // District
           if (user.district != null)
             Row(
@@ -216,7 +224,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               ],
             ),
           const SizedBox(height: 16),
-          
+
           // Bio
           if (user.bio != null)
             Text(
@@ -225,14 +233,14 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               style: const TextStyle(fontSize: 16),
             ),
           const SizedBox(height: 20),
-          
+
           // Stats
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _buildStatItem('Posts', _userPosts.length.toString()),
-              _buildStatItem('Groups', '0'),
-              _buildStatItem('Events', '0'),
+              _buildStatItem('Groups', _userGroups.length.toString()),
+              _buildStatItem('Events', _userEvents.length.toString()),
             ],
           ),
           const SizedBox(height: 20),
@@ -324,9 +332,10 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           const SizedBox(height: 20),
           ElevatedButton.icon(
             onPressed: () {
-              // Navigate to groups screen
-              Navigator.popUntil(context, ModalRoute.withName('/'));
-              // Then select groups tab
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => GroupsListScreen()),
+              );
             },
             icon: const Icon(Icons.search),
             label: const Text('Find Groups'),
@@ -382,7 +391,8 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   _SliverAppBarDelegate(this._tabBar);
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Container(
       color: Theme.of(context).scaffoldBackgroundColor,
       child: _tabBar,

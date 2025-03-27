@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:turikumwe/constants/app_colors.dart';
-import 'package:turikumwe/screens/home_screen.dart';
+// import 'package:turikumwe/screens/home_screen.dart';
+import 'package:turikumwe/screens/main_screen.dart';
 import 'package:turikumwe/services/auth_service.dart';
 import 'package:turikumwe/widgets/custom_button.dart';
 import 'dart:io';
@@ -19,24 +20,48 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
   final _bioController = TextEditingController();
-  
+
   String? _selectedDistrict;
   File? _profileImage;
   bool _isLoading = false;
-  
+
   final List<String> _rwandanDistricts = [
-    'Bugesera', 'Burera', 'Gakenke', 'Gasabo', 'Gatsibo',
-    'Gicumbi', 'Gisagara', 'Huye', 'Kamonyi', 'Karongi',
-    'Kayonza', 'Kicukiro', 'Kirehe', 'Muhanga', 'Musanze',
-    'Ngoma', 'Ngororero', 'Nyabihu', 'Nyagatare', 'Nyamagabe',
-    'Nyamasheke', 'Nyanza', 'Nyarugenge', 'Nyaruguru', 'Rubavu',
-    'Ruhango', 'Rulindo', 'Rusizi', 'Rutsiro', 'Rwamagana',
+    'Bugesera',
+    'Burera',
+    'Gakenke',
+    'Gasabo',
+    'Gatsibo',
+    'Gicumbi',
+    'Gisagara',
+    'Huye',
+    'Kamonyi',
+    'Karongi',
+    'Kayonza',
+    'Kicukiro',
+    'Kirehe',
+    'Muhanga',
+    'Musanze',
+    'Ngoma',
+    'Ngororero',
+    'Nyabihu',
+    'Nyagatare',
+    'Nyamagabe',
+    'Nyamasheke',
+    'Nyanza',
+    'Nyarugenge',
+    'Nyaruguru',
+    'Rubavu',
+    'Ruhango',
+    'Rulindo',
+    'Rusizi',
+    'Rutsiro',
+    'Rwamagana',
   ];
 
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    
+
     if (image != null) {
       setState(() {
         _profileImage = File(image.path);
@@ -52,7 +77,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
       // In a real app, you would upload the image to storage
       // and get a URL back, then save that URL to the user profile
-      
+
       final authService = Provider.of<AuthService>(context, listen: false);
       final success = await authService.updateProfile({
         'phoneNumber': _phoneController.text.trim(),
@@ -68,7 +93,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       if (success && mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const HomeScreen()),
+          MaterialPageRoute(builder: (context) => const MainScreen()),
         );
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -109,7 +134,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 30),
-                
+
                 // Profile picture
                 Center(
                   child: Stack(
@@ -117,11 +142,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       CircleAvatar(
                         radius: 60,
                         backgroundColor: AppColors.lightGrey,
-                        backgroundImage: _profileImage != null 
-                            ? FileImage(_profileImage!) 
+                        backgroundImage: _profileImage != null
+                            ? FileImage(_profileImage!)
                             : null,
-                        child: _profileImage == null 
-                            ? const Icon(Icons.person, size: 60, color: Colors.grey) 
+                        child: _profileImage == null
+                            ? const Icon(Icons.person,
+                                size: 60, color: Colors.grey)
                             : null,
                       ),
                       Positioned(
@@ -147,7 +173,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   ),
                 ),
                 const SizedBox(height: 30),
-                
+
                 // Phone number
                 TextFormField(
                   controller: _phoneController,
@@ -164,7 +190,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                
+
                 // District dropdown
                 DropdownButtonFormField<String>(
                   decoration: const InputDecoration(
@@ -192,7 +218,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Bio
                 TextFormField(
                   controller: _bioController,
@@ -204,7 +230,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   maxLines: 3,
                 ),
                 const SizedBox(height: 30),
-                
+
                 // Save button
                 CustomButton(
                   text: 'Save Profile',
@@ -212,13 +238,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   onPressed: _saveProfile,
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Skip for now
                 TextButton(
                   onPressed: () {
                     Navigator.pushReplacement(
                       context,
-                      MaterialPageRoute(builder: (context) => const HomeScreen()),
+                      MaterialPageRoute(
+                          builder: (context) => const MainScreen()),
                     );
                   },
                   child: const Text('Skip for now'),

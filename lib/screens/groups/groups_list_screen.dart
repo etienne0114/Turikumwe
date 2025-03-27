@@ -17,7 +17,8 @@ class GroupsListScreen extends StatefulWidget {
   State<GroupsListScreen> createState() => _GroupsListScreenState();
 }
 
-class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerProviderStateMixin {
+class _GroupsListScreenState extends State<GroupsListScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isLoading = true;
   List<Group> _allGroups = [];
@@ -43,11 +44,35 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
 
   final List<String> _rwandanDistricts = [
     'All Districts',
-    'Bugesera', 'Burera', 'Gakenke', 'Gasabo', 'Gatsibo', 'Gicumbi',
-    'Gisagara', 'Huye', 'Kamonyi', 'Karongi', 'Kayonza', 'Kicukiro',
-    'Kirehe', 'Muhanga', 'Musanze', 'Ngoma', 'Ngororero', 'Nyabihu',
-    'Nyagatare', 'Nyamagabe', 'Nyamasheke', 'Nyanza', 'Nyarugenge',
-    'Nyaruguru', 'Rubavu', 'Ruhango', 'Rulindo', 'Rusizi', 'Rutsiro',
+    'Bugesera',
+    'Burera',
+    'Gakenke',
+    'Gasabo',
+    'Gatsibo',
+    'Gicumbi',
+    'Gisagara',
+    'Huye',
+    'Kamonyi',
+    'Karongi',
+    'Kayonza',
+    'Kicukiro',
+    'Kirehe',
+    'Muhanga',
+    'Musanze',
+    'Ngoma',
+    'Ngororero',
+    'Nyabihu',
+    'Nyagatare',
+    'Nyamagabe',
+    'Nyamasheke',
+    'Nyanza',
+    'Nyarugenge',
+    'Nyaruguru',
+    'Rubavu',
+    'Ruhango',
+    'Rulindo',
+    'Rusizi',
+    'Rutsiro',
     'Rwamagana',
   ];
 
@@ -80,14 +105,16 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
     setState(() => _isLoading = true);
 
     try {
-      final databaseService = Provider.of<DatabaseService>(context, listen: false);
+      final databaseService =
+          Provider.of<DatabaseService>(context, listen: false);
       final authService = Provider.of<AuthService>(context, listen: false);
-      
+
       List<Group> allGroups = await databaseService.getGroups();
       List<Group> myGroups = [];
-      
+
       if (authService.currentUser != null) {
-        myGroups = await databaseService.getUserGroups(authService.currentUser!.id);
+        myGroups =
+            await databaseService.getUserGroups(authService.currentUser!.id);
       }
 
       if (mounted) {
@@ -111,21 +138,23 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
 
   void _applyFilters() {
     List<Group> baseList = _tabController.index == 0 ? _allGroups : _myGroups;
-    
+
     setState(() {
       _filteredGroups = baseList.where((group) {
-        bool matchesSearch = _searchQuery.isEmpty || 
+        bool matchesSearch = _searchQuery.isEmpty ||
             group.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            group.description.toLowerCase().contains(_searchQuery.toLowerCase());
-        
-        bool matchesCategory = _selectedCategory == null || 
-            _selectedCategory == 'All Categories' || 
+            group.description
+                .toLowerCase()
+                .contains(_searchQuery.toLowerCase());
+
+        bool matchesCategory = _selectedCategory == null ||
+            _selectedCategory == 'All Categories' ||
             group.category == _selectedCategory;
-        
-        bool matchesDistrict = _selectedDistrict == null || 
-            _selectedDistrict == 'All Districts' || 
+
+        bool matchesDistrict = _selectedDistrict == null ||
+            _selectedDistrict == 'All Districts' ||
             group.district == _selectedDistrict;
-        
+
         return matchesSearch && matchesCategory && matchesDistrict;
       }).toList();
     });
@@ -133,23 +162,25 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
 
   void _navigateToGroupScreen(Group group) async {
     final authService = Provider.of<AuthService>(context, listen: false);
-    final databaseService = Provider.of<DatabaseService>(context, listen: false);
-    
+    final databaseService =
+        Provider.of<DatabaseService>(context, listen: false);
+
     if (authService.currentUser == null) {
       // Navigate to group detail screen if not logged in
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => GroupDetailScreen(group: group)),
+        MaterialPageRoute(
+            builder: (context) => GroupDetailScreen(group: group)),
       );
       return;
     }
-    
+
     // Check if user is a member
     final membership = await databaseService.getGroupMembership(
-      group.id, 
+      group.id,
       authService.currentUser!.id,
     );
-    
+
     if (membership != null) {
       // If member, navigate to group home screen
       Navigator.push(
@@ -160,7 +191,8 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
       // If not member, navigate to group detail screen
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => GroupDetailScreen(group: group)),
+        MaterialPageRoute(
+            builder: (context) => GroupDetailScreen(group: group)),
       ).then((_) => _loadGroups());
     }
   }
@@ -170,7 +202,7 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
       context,
       MaterialPageRoute(builder: (context) => const CreateGroupScreen()),
     );
-    
+
     if (result == true) {
       _loadGroups();
     }
@@ -180,7 +212,6 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Groups'),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -213,7 +244,7 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
                     },
                   ),
                 ),
-                
+
                 // Filters
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -223,7 +254,8 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
                         child: DropdownButtonFormField<String>(
                           decoration: const InputDecoration(
                             labelText: 'Category',
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
                             border: OutlineInputBorder(),
                           ),
                           value: _selectedCategory,
@@ -247,7 +279,8 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
                         child: DropdownButtonFormField<String>(
                           decoration: const InputDecoration(
                             labelText: 'District',
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
                             border: OutlineInputBorder(),
                           ),
                           value: _selectedDistrict,
@@ -269,9 +302,9 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // List of groups
                 Expanded(
                   child: TabBarView(
@@ -279,9 +312,12 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
                     children: [
                       // All Groups Tab
                       _buildGroupsList(_filteredGroups),
-                      
+
                       // My Groups Tab
-                      _myGroups.isEmpty && _searchQuery.isEmpty && _selectedCategory == null && _selectedDistrict == null
+                      _myGroups.isEmpty &&
+                              _searchQuery.isEmpty &&
+                              _selectedCategory == null &&
+                              _selectedDistrict == null
                           ? _buildEmptyMyGroups()
                           : _buildGroupsList(_filteredGroups),
                     ],
@@ -330,7 +366,7 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
       itemBuilder: (context, index) {
         final group = groups[index];
         final isMember = _myGroups.any((g) => g.id == group.id);
-        
+
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           shape: RoundedRectangleBorder(
@@ -369,11 +405,12 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
                         : null,
                   ),
                   const SizedBox(width: 16),
-                  
+
                   // Group details
                   Expanded(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,children: [
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Row(
                           children: [
                             Expanded(
@@ -387,7 +424,8 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
                             ),
                             if (isMember)
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: AppColors.primary.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(10),
@@ -403,12 +441,13 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
                           ],
                         ),
                         const SizedBox(height: 4),
-                        
+
                         // Group category and privacy
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
                               decoration: BoxDecoration(
                                 color: Colors.grey[200],
                                 borderRadius: BorderRadius.circular(4),
@@ -438,7 +477,7 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
                           ],
                         ),
                         const SizedBox(height: 4),
-                        
+
                         // Group description (truncated)
                         Text(
                           group.description,
@@ -450,7 +489,7 @@ class _GroupsListScreenState extends State<GroupsListScreen> with SingleTickerPr
                           ),
                         ),
                         const SizedBox(height: 8),
-                        
+
                         // Group location and members count
                         Row(
                           children: [

@@ -31,12 +31,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     });
 
     try {
-      final currentUser = Provider.of<AuthService>(context, listen: false).currentUser;
+      final currentUser =
+          Provider.of<AuthService>(context, listen: false).currentUser;
       if (currentUser != null) {
         final notifications = await DatabaseService().getNotifications(
           currentUser.id,
         );
-        
+
         setState(() {
           _notifications = notifications;
           _isLoading = false;
@@ -51,7 +52,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Future<void> _markAllAsRead() async {
     try {
-      final currentUser = Provider.of<AuthService>(context, listen: false).currentUser;
+      final currentUser =
+          Provider.of<AuthService>(context, listen: false).currentUser;
       if (currentUser != null) {
         // In a real app, we would have a method to mark all as read in one go
         // For this implementation, we'll update each one individually
@@ -60,13 +62,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             await DatabaseService().markNotificationAsRead(notification.id);
           }
         }
-        
+
         // Refresh notifications list
         _loadNotifications();
       }
-    // ignore: empty_catches
-    } catch (e) {
-    }
+      // ignore: empty_catches
+    } catch (e) {}
   }
 
   Future<void> _markAsRead(int id) async {
@@ -132,7 +133,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           Icon(
             Icons.notifications_outlined,
             size: 80,
-            color: Colors.grey,
+            color: Color.fromARGB(255, 82, 240, 8),
           ),
           SizedBox(height: 16),
           Text(
@@ -156,7 +157,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget _buildNotificationTile(app_notification.Notification notification) {
     IconData iconData;
     Color iconColor;
-    
+
     switch (notification.type) {
       case 'like':
         iconData = Icons.favorite;
@@ -178,7 +179,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         iconData = Icons.notifications;
         iconColor = Colors.grey;
     }
-    
+
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: CircleAvatar(
@@ -218,7 +219,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       onTap: () {
         // Navigate to related content
         // For example, if type is 'post', navigate to that post
-        
+
         // Mark as read if not already
         if (!notification.isRead) {
           _markAsRead(notification.id);

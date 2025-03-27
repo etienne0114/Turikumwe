@@ -5,10 +5,14 @@ import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/constants/app_strings.dart';
 import 'package:turikumwe/screens/create_event_screen.dart';
 import 'package:turikumwe/screens/events_screen.dart';
+import 'package:turikumwe/screens/groups/create_group_screen.dart';
 import 'package:turikumwe/screens/groups/groups_list_screen.dart';
 import 'package:turikumwe/screens/home_feed_screen.dart';
+import 'package:turikumwe/screens/messages_screen.dart';
 import 'package:turikumwe/screens/notifications_screen.dart';
 import 'package:turikumwe/screens/profile_screen.dart';
+import 'package:turikumwe/screens/settings_screen.dart';
+import 'package:turikumwe/screens/stories_screen.dart';
 import 'package:turikumwe/services/auth_service.dart';
 
 class MainScreen extends StatefulWidget {
@@ -20,9 +24,9 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
-  
+
   late List<Widget> _screens;
-  
+
   @override
   void initState() {
     super.initState();
@@ -32,16 +36,19 @@ class _MainScreenState extends State<MainScreen> {
       const GroupsListScreen(), // Changed from GroupsScreen to GroupsListScreen
       const EventsScreen(),
       const NotificationsScreen(), // Changed from MessagesScreen
-      const ProfileScreen(), // Changed from StoriesScreen
+      const MessagesScreen(),
+      const StoriesScreen(),
+      const SettingsScreen() // Changed from StoriesScreen
     ];
   }
-  
+
   final List<String> _titles = [
     'Home',
     'Groups',
     'Events',
     'Notifications',
-    'Profile',
+    'Stories',
+    'Messages',
   ];
 
   @override
@@ -54,19 +61,39 @@ class _MainScreenState extends State<MainScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
-            onPressed: isLoggedIn ? () {
-              setState(() {
-                _currentIndex = 3; // Switch to notifications tab
-              });
-            } : _showLoginPrompt,
+            onPressed: isLoggedIn
+                ? () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const NotificationsScreen()),
+                    );
+                  }
+                : _showLoginPrompt,
           ),
           IconButton(
             icon: const Icon(Icons.person_outline),
-            onPressed: isLoggedIn ? () {
-              setState(() {
-                _currentIndex = 4; // Switch to profile tab
-              });
-            } : _showLoginPrompt,
+            onPressed: isLoggedIn
+                ? () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const ProfileScreen()),
+                    );
+                  }
+                : _showLoginPrompt,
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: isLoggedIn
+                ? () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const SettingsScreen()),
+                    );
+                  }
+                : _showLoginPrompt,
           ),
         ],
       ),
@@ -74,15 +101,9 @@ class _MainScreenState extends State<MainScreen> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
-          // If not logged in and trying to access notifications or profile,
-          // show login prompt instead
-          if (!isLoggedIn && (index == 3 || index == 4)) {
-            _showLoginPrompt();
-          } else {
-            setState(() {
-              _currentIndex = index;
-            });
-          }
+          setState(() {
+            _currentIndex = index;
+          });
         },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.primary,
@@ -104,15 +125,15 @@ class _MainScreenState extends State<MainScreen> {
             label: 'Events',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.notifications_outlined),
-            activeIcon: Icon(Icons.notifications),
-            label: 'Notifications',
+            icon: Icon(Icons.auto_stories_outlined),
+            activeIcon: Icon(Icons.auto_stories),
+            label: 'Stories',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person_outlined),
-            activeIcon: Icon(Icons.person),
-            label: 'Profile',
-          ),
+            icon: Icon(Icons.chat_outlined),
+            activeIcon: Icon(Icons.chat),
+            label: 'Messages',
+          )
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -125,7 +146,7 @@ class _MainScreenState extends State<MainScreen> {
       ),
     );
   }
-  
+
   void _showLoginPrompt() {
     showDialog(
       context: context,
@@ -149,15 +170,16 @@ class _MainScreenState extends State<MainScreen> {
       ),
     );
   }
-  
+
   void _showCreateOptionsModal(BuildContext context) {
-    final isLoggedIn = Provider.of<AuthService>(context, listen: false).currentUser != null;
-    
+    final isLoggedIn =
+        Provider.of<AuthService>(context, listen: false).currentUser != null;
+
     if (!isLoggedIn) {
       _showLoginPrompt();
       return;
     }
-    
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -184,7 +206,8 @@ class _MainScreenState extends State<MainScreen> {
                     child: Icon(Icons.post_add, color: Colors.white),
                   ),
                   title: const Text('Create Post'),
-                  subtitle: const Text('Share your thoughts with the community'),
+                  subtitle:
+                      const Text('Share your thoughts with the community'),
                   onTap: () {
                     Navigator.pop(context);
                     // Navigate to create post screen
@@ -198,8 +221,10 @@ class _MainScreenState extends State<MainScreen> {
                   title: const Text('Create Group'),
                   subtitle: const Text('Start a new community group'),
                   onTap: () {
-                    Navigator.pop(context);
-                    // Navigate to create group screen
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => CreateGroupScreen()),
+                    );
                   },
                 ),
                 ListTile(

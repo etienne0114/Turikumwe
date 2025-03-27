@@ -193,6 +193,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.1.4"
+  file_picker:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: master
+      resolved-ref: "30c42b9fd3838043b2f72a4883adcf329c214f32"
+      url: "https://github.com/miguelpruivo/flutter_file_picker.git"
+    source: git
+    version: "9.2.2"
   file_selector_linux:
     dependency: transitive
     description:

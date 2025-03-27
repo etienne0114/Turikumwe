@@ -51,7 +51,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 3, // Increment from 1 to 2 to trigger upgrade
+      version: 4, // Increment from 3 to 4 to trigger upgrade
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
@@ -70,6 +70,12 @@ class DatabaseService {
       // Add isPublic column to groups table
       await db
           .execute('ALTER TABLE groups ADD COLUMN isPublic INTEGER DEFAULT 1');
+    }
+    if (oldVersion < 4) {
+      // Add file attachment columns to messages table
+      await db.execute('ALTER TABLE messages ADD COLUMN fileUrl TEXT');
+      await db.execute('ALTER TABLE messages ADD COLUMN fileType TEXT');
+      await db.execute('ALTER TABLE messages ADD COLUMN fileName TEXT');
     }
   }
 
@@ -194,6 +200,9 @@ class DatabaseService {
         content TEXT NOT NULL,
         timestamp TEXT NOT NULL,
         isRead INTEGER DEFAULT 0,
+        fileUrl TEXT,
+        fileType TEXT,
+        fileName TEXT,
         FOREIGN KEY (senderId) REFERENCES users (id),
         FOREIGN KEY (receiverId) REFERENCES users (id),
         FOREIGN KEY (groupId) REFERENCES groups (id)
@@ -1041,6 +1050,129 @@ class DatabaseService {
     return List.generate(maps.length, (i) {
       return Message.fromMap(maps[i]);
     });
+  }
+  
+  // Mark message as read
+  Future<int> markMessageAsRead(int messageId) async {
+    final db = await database;
+    return await db.update(
+      'messages',
+      {'isRead': 1},
+      where: 'id = ?',
+      whereArgs: [messageId],
+    );
+  }
+
+  // Mark all messages in a conversation as read
+  Future<int> markAllMessagesAsRead({int? senderId, int? receiverId, int? groupId}) async {
+    final db = await database;
+    
+    String whereClause = '';
+    List<dynamic> whereArgs = [];
+
+    if (senderId != null && receiverId != null) {
+      // Direct messages between two users, where the current user is the receiver
+      whereClause = 'senderId = ? AND receiverId = ? AND isRead = 0';
+      whereArgs.add(senderId);
+      whereArgs.add(receiverId);
+    } else if (groupId != null) {
+      // Group messages where current user is not the sender
+      whereClause = 'groupId = ? AND receiverId = ? AND isRead = 0';
+      whereArgs.add(groupId);
+      whereArgs.add(receiverId); // receiverId here would be the current user ID
+    }
+
+    return await db.update(
+      'messages',
+      {'isRead': 1},
+      where: whereClause.isNotEmpty ? whereClause : null,
+      whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
+    );
+  }
+  
+  // Get unread messages count
+  Future<int> getUnreadMessagesCount(int userId) async {
+    final db = await database;
+    
+    final result = await db.rawQuery('''
+      SELECT COUNT(*) as count
+      FROM messages
+      WHERE receiverId = ? AND isRead = 0
+    ''', [userId]);
+    
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+  
+  // Store file attachments with messages
+  Future<int> storeFileAttachment(Map<String, dynamic> message) async {
+    // This function is similar to insertMessage but ensures file fields are present
+    final db = await database;
+    
+    // Make sure timestamp is in proper format
+    if (message['timestamp'] is DateTime) {
+      message['timestamp'] = message['timestamp'].toIso8601String();
+    }
+    
+    return await db.insert('messages', message);
+  }
+  
+  // Get chat conversations list
+  Future<List<Map<String, dynamic>>> getChatConversations(int userId) async {
+    final db = await database;
+    
+    // This query gets the most recent message for each conversation
+    // and counts unread messages
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+      SELECT 
+        m.groupId,
+        CASE 
+          WHEN m.groupId IS NULL THEN 
+            CASE 
+              WHEN m.senderId = ? THEN m.receiverId 
+              ELSE m.senderId 
+            END
+          ELSE NULL
+        END as otherUserId,
+        MAX(m.timestamp) as lastMessageTime,
+        (SELECT content FROM messages WHERE 
+          ((senderId = ? AND receiverId = otherUserId) OR 
+           (senderId = otherUserId AND receiverId = ?)) OR
+          (groupId = m.groupId)
+          ORDER BY timestamp DESC LIMIT 1) as lastMessage,
+        (SELECT COUNT(*) FROM messages WHERE 
+          ((senderId = otherUserId AND receiverId = ? AND isRead = 0) OR
+           (groupId = m.groupId AND receiverId = ? AND isRead = 0))) 
+          as unreadCount,
+        CASE 
+          WHEN m.groupId IS NULL THEN 
+            (SELECT name FROM users WHERE id = otherUserId)
+          ELSE
+            (SELECT name FROM groups WHERE id = m.groupId)
+        END as name,
+        CASE
+          WHEN m.groupId IS NULL THEN 0
+          ELSE 1
+        END as isGroup
+      FROM messages m
+      WHERE 
+        m.senderId = ? OR m.receiverId = ? OR 
+        m.groupId IN (SELECT groupId FROM group_members WHERE userId = ?)
+      GROUP BY 
+        CASE 
+          WHEN m.groupId IS NULL THEN 
+            CASE WHEN m.senderId = ? THEN m.receiverId ELSE m.senderId END
+          ELSE m.groupId
+        END
+      ORDER BY lastMessageTime DESC
+    ''', [
+      userId, // For determining otherUserId
+      userId, userId, // For getting the last message
+      userId, userId, // For counting unread messages
+      userId, userId, userId, // For filtering messages related to the user
+      userId // For grouping
+    ]);
+    
+    return results;
   }
 
   // Notification methods

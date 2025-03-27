@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:turikumwe/constants/app_strings.dart';
 import 'package:turikumwe/screens/auth/register_screen.dart';
-import 'package:turikumwe/screens/home_screen.dart';
+import 'package:turikumwe/screens/main_screen.dart';
 import 'package:turikumwe/services/auth_service.dart';
 import 'package:turikumwe/widgets/custom_button.dart';
 import 'package:turikumwe/widgets/custom_text_field.dart';
@@ -47,7 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (success && mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const HomeScreen()),
+          MaterialPageRoute(builder: (context) => const MainScreen()),
         );
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

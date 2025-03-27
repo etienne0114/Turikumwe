@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/models/post.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:turikumwe/models/user.dart';
 
 class PostCard extends StatefulWidget {
   final Post post;
@@ -66,7 +67,7 @@ class _PostCardState extends State<PostCard> {
         child: Icon(Icons.person),
       ),
       title: const Text(
-        'User Name', // In a real app, load the user's name
+        'user Name', // In a real app, load the user's name
         style: TextStyle(fontWeight: FontWeight.bold),
       ),
       subtitle: Text(
