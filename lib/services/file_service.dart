@@ -238,4 +238,5 @@ class FileResult {
     required this.fileType,
     required this.mimeType,
   });
+  
 }

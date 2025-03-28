@@ -8,10 +8,10 @@ import 'package:turikumwe/services/database_service.dart';
 import 'package:turikumwe/services/file_service.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/foundation.dart';
 
 class ChatScreen extends StatefulWidget {
-  final int chatId;
+  final int chatId;   // Ensure this is explicitly typed as int
   final String chatName;
   final bool isGroup;
 
@@ -33,39 +33,69 @@ class _ChatScreenState extends State<ChatScreen> {
   final FileService _fileService = FileService();
   
   bool _isLoading = true;
+  bool _isSending = false;
   List<Message> _messages = [];
   File? _selectedFile;
   String? _selectedFileName;
   bool _isFileAttached = false;
   String? _fileType;
   String? _fileMimeType;
-  bool _isSending = false;
+  int? _currentUserId;
+  
+  // Timer for periodically checking for new messages
+  // In a real app, this would be replaced with a socket or push notification system
+  bool _isCheckingNewMessages = false;
 
   @override
   void initState() {
     super.initState();
+    _currentUserId = Provider.of<AuthService>(context, listen: false).currentUser?.id;
     _loadMessages();
+    
+    // Start checking for new messages every 5 seconds
+    _setupMessagePolling();
+  }
+  
+  void _setupMessagePolling() {
+    // In a real app, you would use sockets or push notifications instead of polling
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted) {
+        _checkForNewMessages();
+        _setupMessagePolling();
+      }
+    });
   }
 
   @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _isCheckingNewMessages = false;
     super.dispose();
   }
 
   Future<void> _loadMessages() async {
+    if (_currentUserId == null) return;
+    
     setState(() {
       _isLoading = true;
     });
 
     try {
-      // In a real app, load messages from database
-      final messages = await _databaseService.getMessages(
-        groupId: widget.isGroup ? widget.chatId : null,
-        senderId: widget.isGroup ? null : Provider.of<AuthService>(context, listen: false).currentUser?.id,
-        receiverId: widget.isGroup ? null : widget.chatId,
-      );
+      List<Message> messages;
+      
+      if (widget.isGroup) {
+        // For group chats, get messages for that group
+        messages = await _databaseService.getMessages(
+          groupId: widget.chatId,
+        );
+      } else {
+        // For direct chats, get messages between these two users
+        messages = await _databaseService.getMessages(
+          senderId: _currentUserId,
+          receiverId: widget.chatId,
+        );
+      }
       
       setState(() {
         _messages = messages;
@@ -84,17 +114,104 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     }
   }
+  
+  Future<void> _checkForNewMessages() async {
+    if (_isCheckingNewMessages || !mounted || _currentUserId == null) return;
+    
+    _isCheckingNewMessages = true;
+    try {
+      List<Message> latestMessages;
+      
+      if (widget.isGroup) {
+        latestMessages = await _databaseService.getMessages(
+          groupId: widget.chatId,
+        );
+      } else {
+        latestMessages = await _databaseService.getMessages(
+          senderId: _currentUserId,
+          receiverId: widget.chatId,
+        );
+      }
+      
+      // Check if there are new messages
+      if (latestMessages.length > _messages.length) {
+        setState(() {
+          _messages = latestMessages;
+        });
+        
+        // Mark new messages as read
+        _markMessagesAsRead();
+        
+        // If user is already at the bottom, scroll to the new messages
+        if (_isScrolledToBottom()) {
+          _scrollToBottom();
+        } else {
+          // Show a "new message" indicator
+          _showNewMessageNotification();
+        }
+      }
+    } catch (e) {
+      print('Error checking for new messages: $e');
+    } finally {
+      _isCheckingNewMessages = false;
+    }
+  }
+  
+  bool _isScrolledToBottom() {
+    if (!_scrollController.hasClients) return true;
+    
+    final position = _scrollController.position;
+    return position.pixels >= position.maxScrollExtent - 10;
+  }
+  
+  void _showNewMessageNotification() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('New messages'),
+        action: SnackBarAction(
+          label: 'View',
+          onPressed: _scrollToBottom,
+        ),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
 
   Future<void> _markMessagesAsRead() async {
-    final currentUser = Provider.of<AuthService>(context, listen: false).currentUser;
-    if (currentUser == null) return;
-
+    if (_currentUserId == null) return;
+    
     try {
-      await _databaseService.markAllMessagesAsRead(
-        groupId: widget.isGroup ? widget.chatId : null,
-        senderId: widget.isGroup ? null : widget.chatId,
-        receiverId: currentUser.id,
-      );
+      // Find unread messages from the other user
+      final unreadMessages = _messages.where((msg) => 
+        !msg.isRead && msg.senderId != _currentUserId
+      ).toList();
+      
+      if (unreadMessages.isNotEmpty) {
+        // Mark messages as read in database
+        for (var message in unreadMessages) {
+          await _databaseService.markMessageAsRead(message.id);
+        }
+        
+        // Update messages in state
+        setState(() {
+          for (var i = 0; i < _messages.length; i++) {
+            if (!_messages[i].isRead && _messages[i].senderId != _currentUserId) {
+              _messages[i] = Message(
+                id: _messages[i].id,
+                senderId: _messages[i].senderId,
+                receiverId: _messages[i].receiverId,
+                groupId: _messages[i].groupId,
+                content: _messages[i].content,
+                timestamp: _messages[i].timestamp,
+                isRead: true,
+                fileUrl: _messages[i].fileUrl,
+                fileType: _messages[i].fileType,
+                fileName: _messages[i].fileName,
+              );
+            }
+          }
+        });
+      }
     } catch (e) {
       print('Error marking messages as read: $e');
     }
@@ -112,12 +229,71 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  void _showUnsupportedPlatformMessage() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('File picking is currently only supported on Android and iOS'),
-      ),
-    );
+  Future<void> _pickFile() async {
+    if (!_fileService.isMobilePlatform) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('File picking is currently only supported on mobile devices')),
+      );
+      return;
+    }
+
+    try {
+      final result = await _fileService.pickFile();
+      if (result != null) {
+        setState(() {
+          _selectedFile = result.file;
+          _selectedFileName = result.fileName;
+          _isFileAttached = true;
+          _fileType = result.fileType;
+          _fileMimeType = result.mimeType;
+        });
+      }
+    } catch (e) {
+      print('Error picking file: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error picking file: $e')),
+      );
+    }
+  }
+
+  Future<void> _pickImage({bool fromCamera = false}) async {
+    try {
+      final result = await _fileService.pickImage(fromCamera: fromCamera);
+      if (result != null) {
+        setState(() {
+          _selectedFile = result.file;
+          _selectedFileName = result.fileName;
+          _isFileAttached = true;
+          _fileType = result.fileType;
+          _fileMimeType = result.mimeType;
+        });
+      }
+    } catch (e) {
+      print('Error picking image: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error picking image: $e')),
+      );
+    }
+  }
+
+  Future<void> _pickVideo({bool fromCamera = false}) async {
+    try {
+      final result = await _fileService.pickVideo(fromCamera: fromCamera);
+      if (result != null) {
+        setState(() {
+          _selectedFile = result.file;
+          _selectedFileName = result.fileName;
+          _isFileAttached = true;
+          _fileType = result.fileType;
+          _fileMimeType = result.mimeType;
+        });
+      }
+    } catch (e) {
+      print('Error picking video: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error picking video: $e')),
+      );
+    }
   }
 
   void _clearAttachment() {
@@ -131,20 +307,25 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendMessage() async {
-    if ((_messageController.text.trim().isEmpty && !_isFileAttached) || _isSending) return;
-
-    final currentUser = Provider.of<AuthService>(context, listen: false).currentUser;
-    if (currentUser == null) return;
+    if ((_messageController.text.trim().isEmpty && !_isFileAttached) || _isSending || _currentUserId == null) return;
 
     setState(() {
       _isSending = true;
     });
 
     try {
-      final String messageContent = _messageController.text.trim();
+      final currentUser = Provider.of<AuthService>(context, listen: false).currentUser;
+      if (currentUser == null) return;
+
+      final messageText = _messageController.text.trim();
+      Message newMessage;
+      int messageId = 0;
       
-      // If a file is attached, upload it first
+      // Ensure chatId is an int
+      final recipientId = widget.chatId;
+      
       if (_isFileAttached && _selectedFile != null && _selectedFileName != null) {
+        // Send message with file attachment
         final fileResult = FileResult(
           file: _selectedFile!,
           fileName: _selectedFileName!,
@@ -152,69 +333,91 @@ class _ChatScreenState extends State<ChatScreen> {
           mimeType: _fileMimeType ?? 'application/octet-stream',
         );
         
-        final fileUrl = await _fileService.uploadFileAndSaveMessage(
-          fileResult: fileResult,
-          senderId: currentUser.id,
-          receiverId: widget.chatId,
-          groupId: widget.isGroup ? widget.chatId : null,
-          message: messageContent,
-        );
-        
-        if (fileUrl != null) {
-          // Create a new message with file attachment
-          final newMessage = Message(
-            id: 0, // Database will assign real ID
+        try {
+          // Upload file and save message
+          final result = await _fileService.uploadFileAndSaveMessage(
+            fileResult: fileResult,
             senderId: currentUser.id,
-            receiverId: widget.chatId,
-            groupId: widget.isGroup ? widget.chatId : null,
-            content: messageContent.isEmpty 
-                ? '[$_fileType] $_selectedFileName' 
-                : '$messageContent\n[$_fileType] $_selectedFileName',
-            timestamp: DateTime.now(),
-            isRead: false,
-            fileUrl: fileUrl,
-            fileType: _fileType,
-            fileName: _selectedFileName,
+            receiverId: recipientId, // Use the ensured int value
+            groupId: widget.isGroup ? recipientId : null,
+            message: messageText,
           );
           
-          setState(() {
-            _messages.add(newMessage);
-            _messageController.clear();
-            _clearAttachment();
-          });
+          // TYPE FIX: Ensure result is treated as int
+          if (result is int) {
+            messageId = int.tryParse(result ?? '0') ?? 0;
+          } else if (result != null) {
+            // Try to parse the result as int
+            messageId = int.tryParse(result.toString()) ?? 0;
+          }
+        } catch(e) {
+          print('Error uploading file: $e');
+          messageId = 0;
         }
-      } else if (messageContent.isNotEmpty) {
-        // Text-only message
+        
+        // Create new message object
+        newMessage = Message(
+          id: messageId,
+          senderId: currentUser.id,
+          receiverId: recipientId, // Use the ensured int value
+          groupId: widget.isGroup ? recipientId : null,
+          content: messageText.isEmpty 
+              ? '[${_fileType}] ${_selectedFileName}' 
+              : '$messageText\n[${_fileType}] ${_selectedFileName}',
+          timestamp: DateTime.now(),
+          isRead: false,
+          fileUrl: 'pending_upload', // Will be updated when upload is complete
+          fileType: _fileType,
+          fileName: _selectedFileName,
+        );
+      } else {
+        // Send text-only message
         final messageData = {
           'senderId': currentUser.id,
-          'receiverId': widget.chatId,
-          'groupId': widget.isGroup ? widget.chatId : null,
-          'content': messageContent,
+          'receiverId': recipientId, // Use the ensured int value
+          'groupId': widget.isGroup ? recipientId : null,
+          'content': messageText,
           'timestamp': DateTime.now().toIso8601String(),
           'isRead': 0,
         };
         
-        final messageId = await _databaseService.insertMessage(messageData);
+        // Save message to database
+        try {
+          final result = await _databaseService.insertMessage(messageData);
+          // TYPE FIX: Ensure result is treated as int
+          if (result is int) {
+            messageId = result;
+          } else if (result != null) {
+            // Try to parse the result as int
+            messageId = int.tryParse(result.toString()) ?? 0;
+          }
+        } catch (e) {
+          print('Error inserting message: $e');
+          messageId = 0;
+        }
         
-        // Create a new message for the UI
-        final newMessage = Message(
+        // Create new message object
+        newMessage = Message(
           id: messageId,
           senderId: currentUser.id,
-          receiverId: widget.chatId,
-          groupId: widget.isGroup ? widget.chatId : null,
-          content: messageContent,
+          receiverId: recipientId, // Use the ensured int value
+          groupId: widget.isGroup ? recipientId : null,
+          content: messageText,
           timestamp: DateTime.now(),
           isRead: false,
         );
-        
-        setState(() {
-          _messages.add(newMessage);
-          _messageController.clear();
-        });
       }
       
-      // Scroll to the bottom
+      // Add message to local state
+      setState(() {
+        _messages.add(newMessage);
+        _messageController.clear();
+        _clearAttachment();
+      });
+      
+      // Scroll to bottom to show new message
       _scrollToBottom();
+      
     } catch (e) {
       print('Error sending message: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -230,76 +433,67 @@ class _ChatScreenState extends State<ChatScreen> {
   void _showAttachmentOptions() {
     showModalBottomSheet(
       context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) => SafeArea(
         child: Wrap(
           children: [
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text(
+                'Share Content',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const Divider(),
             ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: const Text('Gallery'),
-              onTap: () async {
+              leading: const CircleAvatar(
+                backgroundColor: Colors.purple,
+                child: Icon(Icons.photo_library, color: Colors.white),
+              ),
+              title: const Text('Photo from Gallery'),
+              onTap: () {
                 Navigator.pop(context);
-                final result = await _fileService.pickImage(fromCamera: false);
-                if (result != null) {
-                  setState(() {
-                    _selectedFile = result.file;
-                    _selectedFileName = result.fileName;
-                    _isFileAttached = true;
-                    _fileType = result.fileType;
-                    _fileMimeType = result.mimeType;
-                  });
-                }
+                _pickImage(fromCamera: false);
               },
             ),
             ListTile(
-              leading: const Icon(Icons.photo_camera),
-              title: const Text('Camera'),
-              onTap: () async {
+              leading: const CircleAvatar(
+                backgroundColor: Colors.red,
+                child: Icon(Icons.photo_camera, color: Colors.white),
+              ),
+              title: const Text('Take Photo'),
+              onTap: () {
                 Navigator.pop(context);
-                final result = await _fileService.pickImage(fromCamera: true);
-                if (result != null) {
-                  setState(() {
-                    _selectedFile = result.file;
-                    _selectedFileName = result.fileName;
-                    _isFileAttached = true;
-                    _fileType = result.fileType;
-                    _fileMimeType = result.mimeType;
-                  });
-                }
+                _pickImage(fromCamera: true);
               },
             ),
             ListTile(
-              leading: const Icon(Icons.videocam),
+              leading: const CircleAvatar(
+                backgroundColor: Colors.orange,
+                child: Icon(Icons.videocam, color: Colors.white),
+              ),
               title: const Text('Video'),
-              onTap: () async {
+              onTap: () {
                 Navigator.pop(context);
-                final result = await _fileService.pickVideo(fromCamera: true);
-                if (result != null) {
-                  setState(() {
-                    _selectedFile = result.file;
-                    _selectedFileName = result.fileName;
-                    _isFileAttached = true;
-                    _fileType = result.fileType;
-                    _fileMimeType = result.mimeType;
-                  });
-                }
+                _pickVideo(fromCamera: true);
               },
             ),
-            if (_fileService.isMobilePlatform) // Only show file option on mobile platforms
+            if (_fileService.isMobilePlatform) // Only show document option on mobile platforms
               ListTile(
-                leading: const Icon(Icons.insert_drive_file),
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.blue,
+                  child: Icon(Icons.insert_drive_file, color: Colors.white),
+                ),
                 title: const Text('Document'),
-                onTap: () async {
+                onTap: () {
                   Navigator.pop(context);
-                  final result = await _fileService.pickFile();
-                  if (result != null) {
-                    setState(() {
-                      _selectedFile = result.file;
-                      _selectedFileName = result.fileName;
-                      _isFileAttached = true;
-                      _fileType = result.fileType;
-                      _fileMimeType = result.mimeType;
-                    });
-                  }
+                  _pickFile();
                 },
               ),
           ],
@@ -308,33 +502,8 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Future<void> _openFile(Message message) async {
-    if (message.fileUrl == null) return;
-    
-    try {
-      // In a real app, download the file first if needed
-      // For this demo, we'll just show a message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Opening ${message.fileName ?? "file"}')),
-      );
-      
-      // Launch URL (in a real app, this would open the file)
-      final url = Uri.parse(message.fileUrl!);
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url);
-      }
-    } catch (e) {
-      print('Error opening file: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error opening file: $e')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final currentUser = Provider.of<AuthService>(context).currentUser;
-
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -371,7 +540,7 @@ class _ChatScreenState extends State<ChatScreen> {
           IconButton(
             icon: const Icon(Icons.info_outline),
             onPressed: () {
-              // Show chat info
+              // Show profile or group info
             },
           ),
         ],
@@ -389,7 +558,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           itemCount: _messages.length,
                           itemBuilder: (context, index) {
                             final message = _messages[index];
-                            final isMe = currentUser != null && message.senderId == currentUser.id;
+                            final isMe = message.senderId == _currentUserId;
                             
                             return _buildMessageBubble(message, isMe);
                           },
@@ -459,14 +628,28 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
             _buildMessageContent(message, isMe),
-            const SizedBox(height: 2),
-            Text(
-              dateFormat.format(message.timestamp),
-              style: TextStyle(
-                fontSize: 10,
-                color: isMe ? Colors.white.withOpacity(0.8) : Colors.black54,
-              ),
-              textAlign: TextAlign.right,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  dateFormat.format(message.timestamp),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isMe ? Colors.white.withOpacity(0.8) : Colors.black54,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                // Show read receipts only for messages sent by the current user
+                if (isMe)
+                  Icon(
+                    message.isRead ? Icons.done_all : Icons.done,
+                    size: 14,
+                    color: message.isRead 
+                        ? Colors.blue.withOpacity(0.8) 
+                        : (isMe ? Colors.white.withOpacity(0.8) : Colors.black54),
+                  ),
+              ],
             ),
           ],
         ),
@@ -490,10 +673,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
             ),
-          InkWell(
-            onTap: () => _openFile(message),
-            child: _buildFilePreview(message, isMe),
-          ),
+          _buildFilePreview(message, isMe),
         ],
       );
     } else {
@@ -630,6 +810,7 @@ class _ChatScreenState extends State<ChatScreen> {
               minLines: 1,
               maxLines: 5,
               enabled: !_isSending,
+              onSubmitted: (_) => _sendMessage(),
             ),
           ),
           IconButton(

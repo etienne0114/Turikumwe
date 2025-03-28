@@ -1012,45 +1012,41 @@ class DatabaseService {
       return Story.fromMap(maps[i]);
     });
   }
+Future<List<Message>> getMessages({int? senderId, int? receiverId, int? groupId}) async {
+  final db = await database;
 
-  // Message methods
-  Future<int> insertMessage(Map<String, dynamic> message) async {
-    final db = await database;
-    return await db.insert('messages', message);
+  String whereClause = '';
+  List<dynamic> whereArgs = [];
+
+  if (groupId != null) {
+    // Group messages
+    whereClause = 'groupId = ?';
+    whereArgs.add(groupId);
+  } else if (senderId != null && receiverId != null) {
+    // Direct messages between two users
+    whereClause =
+        '(senderId = ? AND receiverId = ?) OR (senderId = ? AND receiverId = ?)';
+    whereArgs.add(senderId);
+    whereArgs.add(receiverId);
+    whereArgs.add(receiverId);
+    whereArgs.add(senderId);
   }
 
-  Future<List<Message>> getMessages(
-      {int? senderId, int? receiverId, int? groupId}) async {
-    final db = await database;
+  final List<Map<String, dynamic>> maps = await db.query(
+    'messages',
+    where: whereClause.isNotEmpty ? whereClause : null,
+    whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
+    orderBy: 'timestamp ASC',
+  );
 
-    String whereClause = '';
-    List<dynamic> whereArgs = [];
-
-    if (senderId != null && receiverId != null) {
-      // Direct messages between two users
-      whereClause =
-          '(senderId = ? AND receiverId = ?) OR (senderId = ? AND receiverId = ?)';
-      whereArgs.add(senderId);
-      whereArgs.add(receiverId);
-      whereArgs.add(receiverId);
-      whereArgs.add(senderId);
-    } else if (groupId != null) {
-      // Group messages
-      whereClause = 'groupId = ?';
-      whereArgs.add(groupId);
-    }
-
-    final List<Map<String, dynamic>> maps = await db.query(
-      'messages',
-      where: whereClause.isNotEmpty ? whereClause : null,
-      whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
-      orderBy: 'timestamp ASC',
-    );
-
-    return List.generate(maps.length, (i) {
-      return Message.fromMap(maps[i]);
-    });
-  }
+  return List.generate(maps.length, (i) {
+    return Message.fromMap(maps[i]);
+  });
+}
+Future<int> insertMessage(Map<String, dynamic> message) async {
+  final db = await database;
+  return await db.insert('messages', message);
+}
   
   // Mark message as read
   Future<int> markMessageAsRead(int messageId) async {
