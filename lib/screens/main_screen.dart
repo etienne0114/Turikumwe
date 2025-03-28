@@ -56,7 +56,7 @@ class _MainScreenState extends State<MainScreen> {
       final unreadMessages = await _databaseService.getUnreadMessagesCount(currentUser.id);
       
       // Get unread notifications count - you would need to add this method to your DatabaseService
-      final unreadNotifications = 0; // Replace with actual method call
+      const unreadNotifications = 0; // Replace with actual method call
       
       setState(() {
         _unreadMessagesCount = unreadMessages;
@@ -327,7 +327,7 @@ class _MainScreenState extends State<MainScreen> {
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => CreateGroupScreen()),
+                      MaterialPageRoute(builder: (context) => const CreateGroupScreen()),
                     );
                   },
                 ),

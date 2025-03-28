@@ -8,7 +8,6 @@ import 'package:turikumwe/services/database_service.dart';
 import 'package:turikumwe/services/file_service.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ChatScreen extends StatefulWidget {

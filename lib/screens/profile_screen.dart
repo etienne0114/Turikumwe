@@ -102,18 +102,16 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       
       // Check each admin group to see if it was created after the user joined
       for (var group in adminGroups) {
-        if (group.createdAt != null) {
-          try {
-            // FIX: Parse the group.createdAt string to DateTime before comparing
-            DateTime groupCreationDate = group.createdAt;
-            if (groupCreationDate.isAfter(userCreationDate)) {
-              groupsCreatedCount++;
-            }
-          } catch (e) {
-            print('Error parsing group creation date: $e');
+        try {
+          // FIX: Parse the group.createdAt string to DateTime before comparing
+          DateTime groupCreationDate = group.createdAt;
+          if (groupCreationDate.isAfter(userCreationDate)) {
+            groupsCreatedCount++;
           }
+        } catch (e) {
+          print('Error parsing group creation date: $e');
         }
-      }
+            }
       
       // Count events organized by the user
       final eventsOrganized = await _databaseService.getEvents(organizerId: _user!.id);
@@ -600,7 +598,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   ? NetworkImage(group.image!) as ImageProvider
                   : null,
               child: group.image == null
-                  ? Icon(Icons.group, color: AppColors.primary)
+                  ? const Icon(Icons.group, color: AppColors.primary)
                   : null,
             ),
             title: Text(group.name),
