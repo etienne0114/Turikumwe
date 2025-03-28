@@ -181,6 +181,29 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Update the current user in memory without DB call
+  /// Useful when you've already updated the database separately
+  void updateCurrentUser(User user) async {
+    try {
+      _currentUser = user;
+      await _storage.write(key: 'user', value: jsonEncode(user.toMap()));
+      notifyListeners();
+      
+      // Log the update for debugging
+      developer.log(
+        'Updated current user: ID=${user.id}, Name=${user.name}',
+        name: 'AuthService',
+      );
+    } catch (e, stackTrace) {
+      developer.log(
+        'Error updating current user: $e',
+        name: 'AuthService',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
   Future<bool> changePassword(
       String currentPassword, String newPassword) async {
     try {

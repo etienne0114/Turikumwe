@@ -32,7 +32,7 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
   bool _isAdmin = false;
   List<Post> _groupPosts = [];
   int _currentIndex = 0;
-  
+
   @override
   void initState() {
     super.initState();
@@ -42,20 +42,19 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
 
   Future<void> _loadGroupData() async {
     if (!mounted) return;
-    
+
     setState(() => _isLoading = true);
-    
+
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      final databaseService = Provider.of<DatabaseService>(context, listen: false);
+      final databaseService =
+          Provider.of<DatabaseService>(context, listen: false);
 
       // Check membership status if user is logged in
       if (authService.currentUser != null) {
         final membership = await databaseService.getGroupMembership(
-          _group.id, 
-          authService.currentUser!.id
-        );
-        
+            _group.id, authService.currentUser!.id);
+
         if (mounted) {
           setState(() {
             _isMember = membership != null;
@@ -83,7 +82,7 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
 
       // Load group posts
       final posts = await databaseService.getPosts(groupId: _group.id);
-      
+
       if (mounted) {
         setState(() {
           _groupPosts = posts;
@@ -107,14 +106,15 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
 
     // Check if user is the only admin
     if (_isAdmin) {
-      final databaseService = Provider.of<DatabaseService>(context, listen: false);
+      final databaseService =
+          Provider.of<DatabaseService>(context, listen: false);
       final members = await databaseService.getGroupMembers(_group.id);
       final adminCount = members.where((m) => m['isAdmin'] == 1).length;
-      
+
       if (adminCount <= 1) {
         // User is the only admin
         final action = await _showLeaveAdminDialog();
-        
+
         if (action == null || action == 'cancel') {
           return;
         } else if (action == 'transfer') {
@@ -140,13 +140,12 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final databaseService = Provider.of<DatabaseService>(context, listen: false);
+      final databaseService =
+          Provider.of<DatabaseService>(context, listen: false);
       final authService = Provider.of<AuthService>(context, listen: false);
-      
+
       await databaseService.removeGroupMember(
-        _group.id, 
-        authService.currentUser!.id
-      );
+          _group.id, authService.currentUser!.id);
 
       await databaseService.decrementGroupMembersCount(_group.id);
 
@@ -154,10 +153,12 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
         DialogUtils.showSnackBar(context, message: 'You left the group');
         // Navigate back to previous screen
         Navigator.pop(context);
-      }} catch (e) {
+      }
+    } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        DialogUtils.showErrorSnackBar(context, message: 'Failed to leave group: ${e.toString()}');
+        DialogUtils.showErrorSnackBar(context,
+            message: 'Failed to leave group: ${e.toString()}');
       }
     }
   }
@@ -167,7 +168,8 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('You are the only admin'),
-        content: const Text('If you leave, you should first make someone else an admin. What would you like to do?'),
+        content: const Text(
+            'If you leave, you should first make someone else an admin. What would you like to do?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, 'cancel'),
@@ -179,7 +181,8 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, 'leave'),
-            child: const Text('Leave Anyway', style: TextStyle(color: Colors.red)),
+            child:
+                const Text('Leave Anyway', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -188,12 +191,14 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
 
   void _navigateTo(Widget page, {bool refresh = false}) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => page))
-      .then((_) => refresh ? _loadGroupData() : null);
+        .then((_) => refresh ? _loadGroupData() : null);
   }
 
   void _shareGroup() {
     // Implement share functionality
-    DialogUtils.showSnackBar(context, message: 'Share functionality coming soon');
+    DialogUtils.showSnackBar(context,
+        message: 'Share functionality coming soon');
+        
   }
 
   @override
@@ -298,7 +303,7 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
 
   Widget _buildHomeView() {
     final currentUser = Provider.of<AuthService>(context).currentUser;
-    
+
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(child: _buildGroupHeader()),
@@ -414,8 +419,8 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: _group.isPublic 
-                      ? Colors.green.withOpacity(0.1) 
+                  color: _group.isPublic
+                      ? Colors.green.withOpacity(0.1)
                       : Colors.orange.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),

@@ -13,7 +13,9 @@ import 'package:turikumwe/screens/notifications_screen.dart';
 import 'package:turikumwe/screens/profile_screen.dart';
 import 'package:turikumwe/screens/settings_screen.dart';
 import 'package:turikumwe/screens/stories_screen.dart';
+import 'package:turikumwe/screens/user_search_screen.dart';
 import 'package:turikumwe/services/auth_service.dart';
+import 'package:turikumwe/services/database_service.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({Key? key}) : super(key: key);
@@ -24,8 +26,10 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
-
   late List<Widget> _screens;
+  int _unreadMessagesCount = 0;
+  int _unreadNotificationsCount = 0;
+  final DatabaseService _databaseService = DatabaseService();
 
   @override
   void initState() {
@@ -33,20 +37,40 @@ class _MainScreenState extends State<MainScreen> {
     // Initialize screens here to ensure context is available for Provider
     _screens = [
       const HomeFeedScreen(),
-      const GroupsListScreen(), // Changed from GroupsScreen to GroupsListScreen
+      const GroupsListScreen(),
       const EventsScreen(),
-      const NotificationsScreen(), // Changed from MessagesScreen
-      const MessagesScreen(),
       const StoriesScreen(),
-      const SettingsScreen() // Changed from StoriesScreen
+      const MessagesScreen(),
     ];
+    
+    // Load unread counts
+    _loadUnreadCounts();
+  }
+  
+  Future<void> _loadUnreadCounts() async {
+    final currentUser = Provider.of<AuthService>(context, listen: false).currentUser;
+    if (currentUser == null) return;
+    
+    try {
+      // Get unread message count
+      final unreadMessages = await _databaseService.getUnreadMessagesCount(currentUser.id);
+      
+      // Get unread notifications count - you would need to add this method to your DatabaseService
+      final unreadNotifications = 0; // Replace with actual method call
+      
+      setState(() {
+        _unreadMessagesCount = unreadMessages;
+        _unreadNotificationsCount = unreadNotifications;
+      });
+    } catch (e) {
+      print('Error loading unread counts: $e');
+    }
   }
 
   final List<String> _titles = [
     'Home',
     'Groups',
     'Events',
-    'Notifications',
     'Stories',
     'Messages',
   ];
@@ -59,15 +83,62 @@ class _MainScreenState extends State<MainScreen> {
       appBar: AppBar(
         title: Text(_titles[_currentIndex]),
         actions: [
+          if (_currentIndex == 4) // Only show search on Messages screen
+            IconButton(
+              icon: const Icon(Icons.person_search),
+              onPressed: isLoggedIn
+                  ? () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => const UserSearchScreen()),
+                      ).then((_) {
+                        // Refresh unread counts when returning
+                        _loadUnreadCounts();
+                      });
+                    }
+                  : _showLoginPrompt,
+            ),
           IconButton(
-            icon: const Icon(Icons.notifications_outlined),
+            icon: Stack(
+              children: [
+                const Icon(Icons.notifications_outlined),
+                if (_unreadNotificationsCount > 0)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(1),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 12,
+                        minHeight: 12,
+                      ),
+                      child: Text(
+                        _unreadNotificationsCount > 9 ? '9+' : _unreadNotificationsCount.toString(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 8,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
             onPressed: isLoggedIn
                 ? () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                           builder: (context) => const NotificationsScreen()),
-                    );
+                    ).then((_) {
+                      // Refresh unread counts when returning
+                      _loadUnreadCounts();
+                    });
                   }
                 : _showLoginPrompt,
           ),
@@ -104,34 +175,67 @@ class _MainScreenState extends State<MainScreen> {
           setState(() {
             _currentIndex = index;
           });
+          
+          // When switching to messages tab, refresh unread counts
+          if (index == 4) {
+            _loadUnreadCounts();
+          }
         },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.primary,
         unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(
+        items: [
+          const BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),
             activeIcon: Icon(Icons.home),
             label: 'Home',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.group_outlined),
             activeIcon: Icon(Icons.group),
             label: 'Groups',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.event_outlined),
             activeIcon: Icon(Icons.event),
             label: 'Events',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.auto_stories_outlined),
             activeIcon: Icon(Icons.auto_stories),
             label: 'Stories',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.chat_outlined),
-            activeIcon: Icon(Icons.chat),
+            icon: Stack(
+              children: [
+                const Icon(Icons.chat_outlined),
+                if (_unreadMessagesCount > 0)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(1),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 12,
+                        minHeight: 12,
+                      ),
+                      child: Text(
+                        _unreadMessagesCount > 9 ? '9+' : _unreadMessagesCount.toString(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 8,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            activeIcon: const Icon(Icons.chat),
             label: 'Messages',
           )
         ],
@@ -250,6 +354,23 @@ class _MainScreenState extends State<MainScreen> {
                         });
                       }
                     });
+                  },
+                ),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Colors.purple,
+                    child: Icon(Icons.message, color: Colors.white),
+                  ),
+                  title: const Text('New Message'),
+                  subtitle: const Text('Start a conversation with someone'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const UserSearchScreen(),
+                      ),
+                    );
                   },
                 ),
               ],
