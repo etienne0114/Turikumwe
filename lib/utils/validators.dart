@@ -133,4 +133,17 @@ class Validators {
     
     return null;
   }
+  
+  /// Validate a field can be parsed as a number
+  static String? validateNumber(String? value, String fieldName) {
+    if (value == null || value.trim().isEmpty) {
+      return '$fieldName is required';
+    }
+    
+    if (double.tryParse(value) == null) {
+      return 'Please enter a valid number for $fieldName';
+    }
+    
+    return null;
+  }
 }

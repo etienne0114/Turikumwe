@@ -1,14 +1,16 @@
 // lib/screens/event_detail_screen.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/models/event.dart';
+import 'package:turikumwe/models/user.dart';
+import 'package:turikumwe/screens/create_event_screen.dart';
 import 'package:turikumwe/services/auth_service.dart';
 import 'package:turikumwe/services/database_service.dart';
 import 'package:turikumwe/utils/dialog_utils.dart';
-import 'package:turikumwe/utils/string_utils.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class EventDetailScreen extends StatefulWidget {
@@ -21,84 +23,129 @@ class EventDetailScreen extends StatefulWidget {
 }
 
 class _EventDetailScreenState extends State<EventDetailScreen> {
+  late Event _event;
   bool _isAttending = false;
   bool _isLoading = false;
-  List<int> _attendeesIds = [];
-  int _organizerId = 0;
-  String _organizerName = 'Event Host';
+  bool _isLoadingAttendees = false;
+  List<User> _attendees = [];
+  User? _organizer;
+  bool _isEventPast = false;
 
   @override
   void initState() {
     super.initState();
-    _loadAttendanceStatus();
-    _loadOrganizerDetails();
+    _event = widget.event;
+    _isEventPast = _event.date.isBefore(DateTime.now());
+    _checkAttendanceStatus();
+    _loadAttendees();
+    _loadOrganizer();
+    
+    // Track event view for analytics
+    _trackEventView();
   }
-
-  Future<void> _loadAttendanceStatus() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    final currentUser = Provider.of<AuthService>(context, listen: false).currentUser;
-    if (currentUser == null) {
-      setState(() {
-        _isLoading = false;
-      });
-      return;
-    }
-
+  
+  Future<void> _trackEventView() async {
     try {
-      // In a real app, you would fetch this from the database
-      // For now, we'll parse the attendeesIds string from the event
-      if (widget.event.attendeesIds != null) {
-        final attendeesIdsString = widget.event.attendeesIds!;
-        final attendeesList = attendeesIdsString.split(',').map((id) => int.parse(id.trim())).toList();
-
-        setState(() {
-          _attendeesIds = attendeesList;
-          _isAttending = _attendeesIds.contains(currentUser.id);
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _attendeesIds = [];
-          _isAttending = false;
-          _isLoading = false;
-        });
-      }
+      // Just log for now, no actual DB operation
+      debugPrint('Event viewed: ${_event.id}');
     } catch (e) {
-      print('Error loading attendance status: $e');
-      setState(() {
-        _isLoading = false;
-      });
+      debugPrint('Error tracking event view: $e');
     }
   }
 
-  Future<void> _loadOrganizerDetails() async {
-    // In a real app, you would fetch the organizer details from the database
-    // For now, we'll just set the organizer ID
+  Future<void> _checkAttendanceStatus() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser;
+    
+    if (currentUser != null) {
+      // Check if current user is in the attendees list
+      if (_event.attendeesIds != null && _event.attendeesIds!.isNotEmpty) {
+        final attendeeIds = _event.attendeesIds!.split(',')
+            .where((id) => id.trim().isNotEmpty)
+            .map((id) => int.parse(id.trim()))
+            .toList();
+        
+        setState(() {
+          _isAttending = attendeeIds.contains(currentUser.id);
+        });
+      }
+    }
+  }
+
+  Future<void> _loadAttendees() async {
     setState(() {
-      _organizerId = widget.event.organizerId;
+      _isLoadingAttendees = true;
     });
 
     try {
-      final organizer = await DatabaseService().getUserById(widget.event.organizerId);
-      if (organizer != null) {
+      if (_event.attendeesIds == null || _event.attendeesIds!.isEmpty) {
         setState(() {
-          _organizerName = organizer.name;
+          _attendees = [];
+          _isLoadingAttendees = false;
+        });
+        return;
+      }
+      
+      // Get list of attendee IDs
+      final attendeeIdsStr = _event.attendeesIds!;
+      final attendeeIds = attendeeIdsStr.split(',')
+          .where((id) => id.trim().isNotEmpty)
+          .map((id) => int.parse(id.trim()))
+          .toList();
+          
+      if (attendeeIds.isEmpty) {
+        setState(() {
+          _isLoadingAttendees = false;
+        });
+        return;
+      }
+      
+      // Get each user separately (as a workaround for getUsersByIds)
+      List<User> attendees = [];
+      for (var id in attendeeIds) {
+        final user = await DatabaseService().getUserById(id);
+        if (user != null) {
+          attendees.add(user);
+        }
+      }
+      
+      if (mounted) {
+        setState(() {
+          _attendees = attendees;
+          _isLoadingAttendees = false;
         });
       }
     } catch (e) {
-      print('Error loading organizer details: $e');
+      debugPrint('Error loading attendees: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingAttendees = false;
+        });
+      }
+    }
+  }
+  
+  Future<void> _loadOrganizer() async {
+    try {
+      final organizer = await DatabaseService().getUserById(_event.organizerId);
+      if (mounted && organizer != null) {
+        setState(() {
+          _organizer = organizer;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading organizer: $e');
     }
   }
 
   Future<void> _toggleAttendance() async {
-    final currentUser = Provider.of<AuthService>(context, listen: false).currentUser;
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser;
+    
     if (currentUser == null) {
       DialogUtils.showErrorSnackBar(
         context,
-        message: 'You need to be logged in to RSVP for events',
+        message: 'You need to be logged in to register for events',
       );
       return;
     }
@@ -108,256 +155,606 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     });
 
     try {
-      // Create a copy of the attendees list
-      List<int> updatedAttendees = List.from(_attendeesIds);
-
+      // Get current attendees list
+      List<String> attendeeIds = [];
+      if (_event.attendeesIds != null && _event.attendeesIds!.isNotEmpty) {
+        attendeeIds = _event.attendeesIds!
+            .split(',')
+            .where((id) => id.trim().isNotEmpty)
+            .toList();
+      }
+      
+      final currentUserId = currentUser.id.toString();
+      
       if (_isAttending) {
-        // Remove the user from attendees
-        updatedAttendees.remove(currentUser.id);
+        // Remove user from attendees
+        attendeeIds.remove(currentUserId);
       } else {
-        // Add the user to attendees
-        if (!updatedAttendees.contains(currentUser.id)) {
-          updatedAttendees.add(currentUser.id);
+        // Add user to attendees
+        if (!attendeeIds.contains(currentUserId)) {
+          attendeeIds.add(currentUserId);
         }
       }
-
-      // In a real app, you would update the event in the database
-      // For this demo, we'll just update the local state
+      
+      // Update event with new attendees list
       final updatedEvent = {
-        'id': widget.event.id,
-        'attendeesIds': updatedAttendees.join(','),
+        'id': _event.id,
+        'attendeesIds': attendeeIds.join(','),
+        'updatedAt': DateTime.now().toIso8601String(),
       };
       
-      await DatabaseService().updateEvent(updatedEvent);
-
-      setState(() {
-        _attendeesIds = updatedAttendees;
-        _isAttending = !_isAttending;
-        _isLoading = false;
-      });
-
-      DialogUtils.showSnackBar(
-        context,
-        message: _isAttending ? 'You\'re now attending this event' : 'You\'re no longer attending this event',
-        backgroundColor: _isAttending ? Colors.green : Colors.grey,
-      );
-    } catch (e) {
-      print('Error updating attendance: $e');
-      setState(() {
-        _isLoading = false;
-      });
+      final result = await DatabaseService().updateEvent(updatedEvent);
       
-      DialogUtils.showErrorSnackBar(
-        context,
-        message: 'Failed to update attendance. Please try again.',
-      );
+      if (result > 0) {
+        // Reload event data
+        final freshEvent = await DatabaseService().getEventById(_event.id);
+        
+        if (freshEvent != null && mounted) {
+          setState(() {
+            _event = freshEvent;
+            _isAttending = !_isAttending;
+            _isLoading = false;
+          });
+          
+          // Reload attendees
+          _loadAttendees();
+          
+          DialogUtils.showSuccessSnackBar(
+            context,
+            message: _isAttending 
+                ? 'You are now registered for this event' 
+                : 'You have cancelled your registration',
+          );
+        }
+      } else {
+        throw Exception('Failed to update event attendance');
+      }
+    } catch (e) {
+      debugPrint('Error toggling attendance: $e');
+      if (mounted) {
+        DialogUtils.showErrorSnackBar(
+          context,
+          message: 'Failed to update registration. Please try again.',
+        );
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
-  void _shareEvent() {
-    final eventDate = DateFormat('EEEE, MMMM d, yyyy').format(widget.event.date);
-    final eventTime = DateFormat('h:mm a').format(widget.event.date);
+  Future<void> _shareEvent() async {
+    final String shareText = 'Check out this event: ${_event.title}\n'
+        'Date: ${DateFormat('EEEE, MMM d, y • h:mm a').format(_event.date)}\n'
+        'Location: ${_event.location}, ${_event.district ?? ''}\n\n'
+        'Join me at this event through the Turikumwe app!';
     
-    final shareText = """
-Join me at ${widget.event.title}!
-
-🗓️ $eventDate at $eventTime
-📍 ${widget.event.location}
-
-${StringUtils.truncate(widget.event.description, 100)}
-
-Download the Turikumwe app to RSVP and see more details.
-""";
-
-    Share.share(shareText);
+    try {
+      // Track share analytics
+      debugPrint('Event shared: ${_event.id}');
+      
+      await Share.share(shareText);
+    } catch (e) {
+      debugPrint('Error sharing event: $e');
+      if (mounted) {
+        DialogUtils.showErrorSnackBar(
+          context,
+          message: 'Failed to share event. Please try again.',
+        );
+      }
+    }
   }
 
-  Future<void> _openMapLocation() async {
-    final location = Uri.encodeComponent(widget.event.location);
-    final url = 'https://www.google.com/maps/search/?api=1&query=$location';
+  Future<void> _openLocationMap() async {
+    final String query = Uri.encodeComponent('${_event.location}, ${_event.district ?? ''}, Rwanda');
+    final Uri uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
     
-    if (await canLaunch(url)) {
-      await launch(url);
-    } else {
-      DialogUtils.showErrorSnackBar(
-        context,
-        message: 'Could not open map location',
-      );
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          DialogUtils.showErrorSnackBar(
+            context,
+            message: 'Could not open map application',
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error opening map: $e');
+      if (mounted) {
+        DialogUtils.showErrorSnackBar(
+          context, 
+          message: 'Failed to open map.',
+        );
+      }
     }
+  }
+
+  void _navigateToEditEvent() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CreateEventScreen(eventToEdit: _event),
+      ),
+    ).then((result) {
+      if (result == true) {
+        _refreshEventData();
+      }
+    });
+  }
+
+  Future<void> _refreshEventData() async {
+    try {
+      final freshEvent = await DatabaseService().getEventById(_event.id);
+      if (freshEvent != null && mounted) {
+        setState(() {
+          _event = freshEvent;
+        });
+        _checkAttendanceStatus();
+        _loadAttendees();
+      }
+    } catch (e) {
+      debugPrint('Error refreshing event data: $e');
+    }
+  }
+
+  bool get _isOrganizerOrAdmin {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser;
+    
+    if (currentUser == null) return false;
+    
+    // Check if user is the organizer or an admin
+    return currentUser.id == _event.organizerId || 
+           (currentUser.isAdmin == true);
   }
 
   @override
   Widget build(BuildContext context) {
-    final isCurrentUserOrganizer = Provider.of<AuthService>(context).currentUser?.id == _organizerId;
-    final eventDate = DateFormat('EEEE, MMMM d, yyyy').format(widget.event.date);
-    final eventTime = DateFormat('h:mm a').format(widget.event.date);
+    final authService = Provider.of<AuthService>(context);
+    final bool isLoggedIn = authService.currentUser != null;
     
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          // App bar with image
-          SliverAppBar(
-            expandedHeight: 220,
-            pinned: true,
-            flexibleSpace: FlexibleSpaceBar(
-              background: widget.event.image != null
-                  ? Image.asset(
-                      widget.event.image!,
-                      fit: BoxFit.cover,
-                    )
-                  : Container(
-                      color: AppColors.primary.withOpacity(0.2),
-                      child: Icon(
-                        Icons.event,
-                        size: 80,
-                        color: AppColors.primary.withOpacity(0.8),
-                      ),
-                    ),
-            ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.share),
-                onPressed: _shareEvent,
-              ),
-              if (isCurrentUserOrganizer)
+      body: RefreshIndicator(
+        onRefresh: _refreshEventData,
+        child: CustomScrollView(
+          slivers: [
+            // App Bar with Image
+            SliverAppBar(
+              expandedHeight: 220,
+              pinned: true,
+              actions: [
+                if (_isOrganizerOrAdmin)
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: _navigateToEditEvent,
+                    tooltip: 'Edit Event',
+                  ),
                 IconButton(
-                  icon: const Icon(Icons.edit),
-                  onPressed: () {
-                    // Navigate to edit event screen
-                  },
+                  icon: const Icon(Icons.share),
+                  onPressed: _shareEvent,
+                  tooltip: 'Share Event',
                 ),
-            ],
-          ),
-          
-          // Event details
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
+              ],
+              flexibleSpace: FlexibleSpaceBar(
+                background: _buildEventImage(),
+              ),
+            ),
+            
+            // Event Content
+            SliverToBoxAdapter(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Title
-                  Text(
-                    widget.event.title,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Date and time
-                  _buildInfoRow(
-                    icon: Icons.calendar_today,
-                    title: 'Date & Time',
-                    subtitle: '$eventDate\n$eventTime',
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // Location with map link
-                  InkWell(
-                    onTap: _openMapLocation,
-                    child: _buildInfoRow(
-                      icon: Icons.location_on,
-                      title: 'Location',
-                      subtitle: widget.event.location,
-                      trailing: const Icon(
-                        Icons.map,
-                        color: AppColors.primary,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // Organizer
-                  _buildInfoRow(
-                    icon: Icons.person,
-                    title: 'Organizer',
-                    subtitle: _organizerName,
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // Attendees count
-                  _buildInfoRow(
-                    icon: Icons.people,
-                    title: 'Attendees',
-                    subtitle: '${_attendeesIds.length} attending',
-                  ),
-                  const SizedBox(height: 20),
-                  
-                  // Description
-                  const Text(
-                    'About this event',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    widget.event.description,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      height: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 36),
-                  
-                  // RSVP button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: _isLoading ? null : _toggleAttendance,
-                      icon: Icon(_isAttending ? Icons.check : Icons.add),
-                      label: Text(_isAttending ? 'Attending' : 'RSVP for Event'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _isAttending 
-                            ? Colors.green 
-                            : AppColors.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                  // Title, Date, Location Section
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Event Title
+                        Text(
+                          _event.title,
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 16),
+                        
+                        // Date & Time
+                        _buildInfoRow(
+                          icon: Icons.calendar_today,
+                          title: 'Date & Time',
+                          content: DateFormat('EEEE, MMM d, y • h:mm a').format(_event.date),
+                          primaryColor: AppColors.primary,
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        // Location with Map Button
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.all(8),
+                              child: const Icon(
+                                Icons.location_on,
+                                color: AppColors.primary,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Location',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _event.district != null 
+                                      ? '${_event.location}, ${_event.district}'
+                                      : _event.location,
+                                    style: const TextStyle(fontSize: 16),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.map, color: AppColors.primary),
+                              onPressed: _openLocationMap,
+                              tooltip: 'Open in Map',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        // Category
+                        if (_event.category != null) ...[
+                          _buildInfoRow(
+                            icon: Icons.category,
+                            title: 'Category',
+                            content: _event.category!,
+                            primaryColor: Colors.teal,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        
+                        // Price Information (if paid event)
+                        if (_event.price != null && _event.price! > 0) ...[
+                          _buildInfoRow(
+                            icon: Icons.money,
+                            title: 'Entry Fee',
+                            content: '${_event.price!.toStringAsFixed(0)} RWF',
+                            subContent: _event.paymentMethod != null 
+                                ? 'Payment via ${_event.paymentMethod}' 
+                                : null,
+                            primaryColor: Colors.green,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        
+                        // Organizer
+                        _buildInfoRow(
+                          icon: Icons.person,
+                          title: 'Organizer',
+                          content: _organizer?.name ?? 'Loading...',
+                          primaryColor: Colors.deepPurple,
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        // Attendees count
+                        _buildInfoRow(
+                          icon: Icons.people,
+                          title: 'Attendees',
+                          content: _isLoadingAttendees 
+                            ? 'Loading...' 
+                            : '${_attendees.length} registered',
+                          primaryColor: Colors.blue,
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        // Visibility Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _event.isPrivate == true
+                                ? Colors.amber.withOpacity(0.2)
+                                : Colors.green.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _event.isPrivate == true
+                                    ? Icons.lock
+                                    : Icons.public,
+                                size: 16,
+                                color: _event.isPrivate == true 
+                                    ? Colors.amber[800]
+                                    : Colors.green[800],
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                _event.isPrivate == true
+                                    ? 'Private Event'
+                                    : 'Public Event',
+                                style: TextStyle(
+                                  color: _event.isPrivate == true 
+                                      ? Colors.amber[800]
+                                      : Colors.green[800],
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        const Divider(height: 32),
+                        
+                        // Description
+                        const Text(
+                          'About this event',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _event.description,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            height: 1.5,
+                          ),
+                        ),
+                        
+                        const Divider(height: 32),
+                        
+                        // Attendees Section
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Attendees',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              '${_attendees.length} people attending',
+                              style: const TextStyle(color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        
+                        // Attendees List (Simple implementation)
+                        if (_isLoadingAttendees)
+                          const Center(
+                            child: CircularProgressIndicator(),
+                          )
+                        else if (_attendees.isEmpty)
+                          const Center(
+                            child: Text('No attendees yet. Be the first to join!'),
+                          )
+                        else
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: _attendees.map((attendee) {
+                              return Column(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 24,
+                                    backgroundImage: attendee.profilePicture != null 
+                                        ? NetworkImage(attendee.profilePicture!) as ImageProvider
+                                        : null,
+                                    child: attendee.profilePicture == null
+                                        ? Text(
+                                            attendee.name[0].toUpperCase(),
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 18,
+                                            ),
+                                          )
+                                        : null,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    attendee.name.split(' ')[0], // Just first name
+                                    style: const TextStyle(fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              );
+                            }).toList(),
+                          ),
+                        
+                        const SizedBox(height: 80), // Bottom padding for FAB
+                      ],
                     ),
                   ),
-                  
-                  // Cancel attendance button (if attending)
-                  if (_isAttending)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: TextButton(
-                          onPressed: _isLoading ? null : _toggleAttendance,
-                          child: const Text('Cancel Attendance'),
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
+      
+      // Attendance Button
+      floatingActionButton: !_isEventPast && isLoggedIn
+          ? SizedBox(
+              width: MediaQuery.of(context).size.width * 0.9,
+              child: ElevatedButton.icon(
+                onPressed: _isLoading ? null : _toggleAttendance,
+                icon: Icon(_isAttending ? Icons.close : Icons.check_circle),
+                label: Text(
+                  _isAttending
+                    ? 'Cancel Registration'
+                    : _event.price != null && _event.price! > 0
+                        ? 'Register Now • ${_event.price!.toStringAsFixed(0)} RWF'
+                        : 'Register Now • Free',
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isAttending ? Colors.red : AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            )
+          : _isEventPast
+              ? SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.9,
+                  child: ElevatedButton.icon(
+                    onPressed: null,
+                    icon: const Icon(Icons.event_busy),
+                    label: const Text('Event has ended'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                )
+              : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
+  }
+
+  Widget _buildEventImage() {
+    if (_event.image == null || _event.image!.isEmpty) {
+      return Container(
+        color: AppColors.primary.withOpacity(0.2),
+        child: const Center(
+          child: Icon(
+            Icons.event,
+            size: 64,
+            color: Colors.white,
+          ),
+        ),
+      );
+    }
+    
+    try {
+      if (_event.image!.startsWith('http')) {
+        // Network image
+        return Hero(
+          tag: 'event-image-${_event.id}',
+          child: Image.network(
+            _event.image!,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                color: Colors.grey[300],
+                child: const Icon(
+                  Icons.image_not_supported,
+                  size: 50,
+                  color: Colors.grey,
+                ),
+              );
+            },
+          ),
+        );
+      } else if (_event.image!.startsWith('file://') || _event.image!.startsWith('/')) {
+        // Local file image
+        final imagePath = _event.image!.startsWith('file://') 
+            ? _event.image!.replaceFirst('file://', '') 
+            : _event.image!;
+        
+        return Hero(
+          tag: 'event-image-${_event.id}',
+          child: Image.file(
+            File(imagePath),
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                color: Colors.grey[300],
+                child: const Icon(
+                  Icons.broken_image,
+                  size: 50,
+                  color: Colors.grey,
+                ),
+              );
+            },
+          ),
+        );
+      } else {
+        // Asset image
+        return Hero(
+          tag: 'event-image-${_event.id}',
+          child: Image.asset(
+            _event.image!,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                color: Colors.grey[300],
+                child: const Icon(
+                  Icons.broken_image,
+                  size: 50,
+                  color: Colors.grey,
+                ),
+              );
+            },
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error loading event image: $e');
+      return Container(
+        color: AppColors.primary.withOpacity(0.2),
+        child: const Center(
+          child: Icon(
+            Icons.error_outline,
+            size: 64,
+            color: Colors.white,
+          ),
+        ),
+      );
+    }
   }
 
   Widget _buildInfoRow({
     required IconData icon,
     required String title,
-    required String subtitle,
-    Widget? trailing,
+    required String content,
+    String? subContent,
+    required Color primaryColor,
   }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          icon,
-          color: AppColors.primary,
-          size: 24,
+        Container(
+          decoration: BoxDecoration(
+            color: primaryColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.all(8),
+          child: Icon(
+            icon,
+            color: primaryColor,
+            size: 20,
+          ),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -367,22 +764,28 @@ Download the Turikumwe app to RSVP and see more details.
               Text(
                 title,
                 style: const TextStyle(
-                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: Colors.grey,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
-                subtitle,
-                style: const TextStyle(
-                  fontSize: 16,
-                ),
+                content,
+                style: const TextStyle(fontSize: 16),
               ),
+              if (subContent != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  subContent,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
-        if (trailing != null) trailing,
       ],
     );
   }

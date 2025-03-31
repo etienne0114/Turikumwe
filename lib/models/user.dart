@@ -1,4 +1,3 @@
-
 // lib/models/user.dart
 class User {
   final int id;
@@ -10,6 +9,8 @@ class User {
   final String? bio;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final bool? isAdmin;
+  final bool? isVerified;
   
   User({
     required this.id,
@@ -21,7 +22,12 @@ class User {
     this.bio,
     required this.createdAt,
     required this.updatedAt,
+    this.isAdmin,
+    this.isVerified,
   });
+  
+  // Add getter for fullName to support UserAvatar component
+  String get fullName => name;
   
   Map<String, dynamic> toMap() {
     return {
@@ -34,6 +40,8 @@ class User {
       'bio': bio,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+      'isAdmin': isAdmin == true ? 1 : 0,
+      'isVerified': isVerified == true ? 1 : 0,
     };
   }
   
@@ -48,6 +56,8 @@ class User {
       bio: map['bio'],
       createdAt: DateTime.parse(map['createdAt']),
       updatedAt: DateTime.parse(map['updatedAt']),
+      isAdmin: map['isAdmin'] == 1,
+      isVerified: map['isVerified'] == 1,
     );
   }
 }

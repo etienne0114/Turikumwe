@@ -6,13 +6,15 @@ import 'package:turikumwe/models/event.dart';
 import 'package:turikumwe/models/group.dart';
 import 'package:turikumwe/models/post.dart';
 import 'package:turikumwe/models/user.dart';
+import 'package:turikumwe/screens/create_event_screen.dart';
+import 'package:turikumwe/screens/event_detail_screen.dart';
 import 'package:turikumwe/screens/events_screen.dart';
 import 'package:turikumwe/screens/groups/groups_list_screen.dart';
 import 'package:turikumwe/screens/edit_profile_screen.dart';
 import 'package:turikumwe/screens/chat_screen.dart';
 import 'package:turikumwe/services/auth_service.dart';
 import 'package:turikumwe/services/database_service.dart';
-import 'package:turikumwe/services/user_service.dart'; // Add this import
+import 'package:turikumwe/services/user_service.dart';
 import 'package:intl/intl.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -26,7 +28,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
   final DatabaseService _databaseService = DatabaseService();
-  final UserService _userService = UserService(); // Add this
+  final UserService _userService = UserService();
   late TabController _tabController;
   bool _isLoading = true;
   User? _user;
@@ -34,6 +36,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   List<Post> _userPosts = [];
   List<Group> _userGroups = [];
   List<Event> _userEvents = [];
+  List<Event> _organizedEvents = [];
   Map<String, int> _stats = {
     'postCount': 0,
     'groupCount': 0,
@@ -46,7 +49,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadUserProfile();
   }
 
@@ -94,7 +97,36 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       final groups = await _databaseService.getUserGroups(_user!.id);
       
       // Load user events (events the user is attending)
-      final events = await _databaseService.getEventsUserIsAttending(_user!.id);
+      final attendingEvents = await _databaseService.getEventsUserIsAttending(_user!.id);
+      
+      // Load events organized by the user
+      final eventsOrganized = await _databaseService.getEvents(organizerId: _user!.id);
+      
+      // Save organized events separately
+      _organizedEvents = eventsOrganized;
+      
+      // Combine both types of events without duplicates
+      final Set<int> eventIds = {};
+      final List<Event> combinedEvents = [];
+      
+      // Add attending events
+      for (var event in attendingEvents) {
+        if (!eventIds.contains(event.id)) {
+          eventIds.add(event.id);
+          combinedEvents.add(event);
+        }
+      }
+      
+      // Add organized events
+      for (var event in eventsOrganized) {
+        if (!eventIds.contains(event.id)) {
+          eventIds.add(event.id);
+          combinedEvents.add(event);
+        }
+      }
+      
+      // Sort events by date (most recent first)
+      combinedEvents.sort((a, b) => b.date.compareTo(a.date));
       
       // Count groups created by the user
       final adminGroups = await _databaseService.getUserAdminGroups(_user!.id);
@@ -103,34 +135,30 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       // Check each admin group to see if it was created after the user joined
       for (var group in adminGroups) {
         try {
-          // FIX: Parse the group.createdAt string to DateTime before comparing
           DateTime groupCreationDate = group.createdAt;
           if (groupCreationDate.isAfter(userCreationDate)) {
             groupsCreatedCount++;
           }
         } catch (e) {
-          print('Error parsing group creation date: $e');
+          debugPrint('Error parsing group creation date: $e');
         }
-            }
-      
-      // Count events organized by the user
-      final eventsOrganized = await _databaseService.getEvents(organizerId: _user!.id);
+      }
       
       setState(() {
         _userPosts = posts;
         _userGroups = groups;
-        _userEvents = events;
+        _userEvents = combinedEvents;
         _stats = {
           'postCount': posts.length,
           'groupCount': groups.length,
-          'eventCount': events.length,
+          'eventCount': attendingEvents.length,
           'groupsCreatedCount': groupsCreatedCount,
           'eventsCreatedCount': eventsOrganized.length,
         };
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading user profile: $e');
+      debugPrint('Error loading user profile: $e');
       setState(() {
         _isLoading = false;
       });
@@ -398,6 +426,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     Tab(text: 'Posts'),
                     Tab(text: 'Groups'),
                     Tab(text: 'Events'),
+                    Tab(text: 'Organized'),
                   ],
                 ),
               ),
@@ -411,6 +440,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             _buildPostsTab(),
             _buildGroupsTab(),
             _buildEventsTab(),
+            _buildOrganizedEventsTab(),
           ],
         ),
       ),
@@ -638,7 +668,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       itemCount: _userEvents.length,
       itemBuilder: (context, index) {
         final event = _userEvents[index];
-        // FIX: Parse the event.date string to DateTime
         final eventDate = event.date;
         final isPastEvent = eventDate.isBefore(DateTime.now());
         
@@ -684,12 +713,233 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               ],
             ),
             isThreeLine: true,
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
             onTap: () {
               // Navigate to event details
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EventDetailScreen(event: event),
+                ),
+              ).then((_) => _loadUserProfile()); // Refresh on return
             },
           ),
         );
       },
+    );
+  }
+
+  // Organized events tab
+  Widget _buildOrganizedEventsTab() {
+    if (_organizedEvents.isEmpty) {
+      return _buildEmptyState(
+        icon: Icons.event_available,
+        title: 'No Events Organized',
+        message: _isCurrentUser 
+            ? 'Create your first event to see it here'
+            : '${_user!.name} hasn\'t organized any events yet',
+        actionLabel: _isCurrentUser ? 'Create Event' : null,
+        action: _isCurrentUser 
+            ? () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const CreateEventScreen()),
+                ).then((_) => _loadUserProfile());
+              } 
+            : null,
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(8),
+      itemCount: _organizedEvents.length,
+      itemBuilder: (context, index) {
+        final event = _organizedEvents[index];
+        final eventDate = event.date;
+        final isPastEvent = eventDate.isBefore(DateTime.now());
+        
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: isPastEvent ? Colors.grey.shade300 : AppColors.primary.withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+          child: InkWell(
+            onTap: () {
+              // Navigate to event details when tapped
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EventDetailScreen(event: event),
+                ),
+              ).then((_) => _loadUserProfile());
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Event image or placeholder
+                ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    topRight: Radius.circular(12),
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 120,
+                    child: event.image != null
+                        ? Image.network(
+                            event.image!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => _buildEventImagePlaceholder(isPastEvent),
+                          )
+                        : _buildEventImagePlaceholder(isPastEvent),
+                  ),
+                ),
+                
+                // Event details
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Event title with organizer badge
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              event.title,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: isPastEvent ? Colors.grey : Colors.black,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'Organizer',
+                              style: TextStyle(
+                                color: AppColors.primary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 8),
+                      
+                      // Event date and location
+                      Row(
+                        children: [
+                          Icon(Icons.calendar_today, size: 14, color: isPastEvent ? Colors.grey : AppColors.primary),
+                          const SizedBox(width: 4),
+                          Text(
+                            DateFormat('MMM d, y • h:mm a').format(eventDate),
+                            style: TextStyle(
+                              color: isPastEvent ? Colors.grey : Colors.black87,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 4),
+                      
+                      Row(
+                        children: [
+                          Icon(Icons.location_on, size: 14, color: isPastEvent ? Colors.grey : AppColors.primary),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              event.location,
+                              style: TextStyle(
+                                color: isPastEvent ? Colors.grey : Colors.black87,
+                                fontSize: 13,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 8),
+                      
+                      // Event status and attendees count
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // Status badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isPastEvent 
+                                  ? Colors.grey.shade200 
+                                  : AppColors.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              isPastEvent ? 'Past' : 'Upcoming',
+                              style: TextStyle(
+                                color: isPastEvent ? Colors.grey : AppColors.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          
+                          // Attendees count
+                          Row(
+                            children: [
+                              Icon(Icons.people, size: 14, color: isPastEvent ? Colors.grey : AppColors.primary),
+                              const SizedBox(width: 4),
+                              Text(
+                                event.attendeesCount.toString(),
+                                style: TextStyle(
+                                  color: isPastEvent ? Colors.grey : Colors.black87,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Helper method for event image placeholder
+  Widget _buildEventImagePlaceholder(bool isPast) {
+    return Container(
+      color: isPast ? Colors.grey.shade200 : AppColors.primary.withOpacity(0.1),
+      child: Center(
+        child: Icon(
+          Icons.event,
+          size: 40,
+          color: isPast ? Colors.grey : AppColors.primary.withOpacity(0.7),
+        ),
+      ),
     );
   }
 

@@ -12,11 +12,15 @@ void main() async {
   // Initialize all services
   await ServiceLocator.init();
   
+  // Update the events table schema if needed
+  final databaseService = DatabaseService();
+  await databaseService.updateEventTableIfNeeded();
+  
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ServiceLocator.auth),
-        Provider<DatabaseService>(create: (_) => DatabaseService()), // Create new instance
+        Provider<DatabaseService>(create: (_) => databaseService), // Use the same instance
         Provider<StorageService>(create: (_) => StorageService()), // Create new instance
       ],
       child: const MyApp(),

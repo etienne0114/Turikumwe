@@ -11,13 +11,15 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   cupertino_icons: ^1.0.5
   sqflite: ^2.2.8+4
   path: ^1.8.3
   provider: ^6.0.5
   shared_preferences: ^2.1.1
   http: ^0.13.6
-  intl: ^0.18.1
+  intl: 0.19.0
   image_picker: ^0.8.7+5
   flutter_svg: ^2.0.5
   lottie: ^2.3.2
@@ -41,12 +43,17 @@ dependencies:
   share_plus: ^7.0.2
   dio: ^5.3.2   
   mime: ^1.0.4
+  image: ^4.0.15
+  table_calendar: ^3.0.6
   
   # Use git dependency to avoid platform reference issues
   file_picker:
     git:
       url: https://github.com/miguelpruivo/flutter_file_picker.git
       ref: master
+  timezone: ^0.9.4
+  flutter_local_notifications: ^18.0.1
+  flutter_gen: ^5.10.0
 
 dependency_overrides:
   # Override to fix file_picker platform issues
@@ -62,6 +69,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  generate: true  # Added to enable localization code generation
 
   assets:
     - assets/images/

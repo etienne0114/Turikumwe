@@ -367,8 +367,8 @@ class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProvid
       floatingActionButton: FloatingActionButton(
         onPressed: _navigateToUserSearch,
         backgroundColor: AppColors.primary,
-        child: const Icon(Icons.chat),
         tooltip: 'New Message',
+        child: const Icon(Icons.chat),
       ),
     );
   }

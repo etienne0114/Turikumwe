@@ -1,4 +1,5 @@
 // lib/services/database_service.dart
+
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:turikumwe/models/user.dart';
@@ -8,6 +9,7 @@ import 'package:turikumwe/models/event.dart';
 import 'package:turikumwe/models/story.dart';
 import 'package:turikumwe/models/message.dart';
 import 'package:turikumwe/models/notification.dart';
+import 'package:turikumwe/models/event_analytics.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -21,9 +23,8 @@ class DatabaseService {
     _database = await initDatabase();
     return _database!;
   }
-  // Add this method to your DatabaseService class
 
-// Method to completely reset database - USE WITH CAUTION
+  // Method to completely reset database - USE WITH CAUTION
   Future<void> resetDatabase() async {
     try {
       // Close database if it's open
@@ -51,7 +52,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 4, // Increment from 3 to 4 to trigger upgrade
+      version: 5, // Increment to 5 to trigger upgrade
       onCreate: _createDatabase,
       onUpgrade: _upgradeDatabase,
     );
@@ -76,6 +77,51 @@ class DatabaseService {
       await db.execute('ALTER TABLE messages ADD COLUMN fileUrl TEXT');
       await db.execute('ALTER TABLE messages ADD COLUMN fileType TEXT');
       await db.execute('ALTER TABLE messages ADD COLUMN fileName TEXT');
+    }
+    if (oldVersion < 5) {
+      // Add the missing columns to events table
+      try {
+        await db.execute('ALTER TABLE events ADD COLUMN isPrivate INTEGER DEFAULT 0');
+        print("Added isPrivate column to events table");
+      } catch (e) {
+        print("Error adding isPrivate column: $e");
+        // Column might already exist
+      }
+      
+      try {
+        await db.execute('ALTER TABLE events ADD COLUMN price REAL');
+        print("Added price column to events table");
+      } catch (e) {
+        print("Error adding price column: $e");
+        // Column might already exist
+      }
+      
+      try {
+        await db.execute('ALTER TABLE events ADD COLUMN paymentMethod TEXT');
+        print("Added paymentMethod column to events table");
+      } catch (e) {
+        print("Error adding paymentMethod column: $e");
+        // Column might already exist
+      }
+      
+      // Create event_analytics table
+      try {
+        await db.execute('''
+          CREATE TABLE event_analytics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            eventId INTEGER NOT NULL,
+            viewCount INTEGER DEFAULT 0,
+            shareCount INTEGER DEFAULT 0,
+            clickCount INTEGER DEFAULT 0,
+            lastUpdated TEXT NOT NULL,
+            FOREIGN KEY (eventId) REFERENCES events (id)
+          )
+        ''');
+        print("Created event_analytics table");
+      } catch (e) {
+        print("Error creating event_analytics table: $e");
+        // Table might already exist
+      }
     }
   }
 
@@ -154,9 +200,9 @@ class DatabaseService {
       )
     ''');
 
-    // Events table
+    // Events table - updated with new columns
     await db.execute('''
-      CREATE TABLE events (
+       CREATE TABLE events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         description TEXT NOT NULL,
@@ -168,10 +214,26 @@ class DatabaseService {
         attendeesIds TEXT,
         district TEXT,
         category TEXT,
+        isPrivate INTEGER DEFAULT 0,
+        price REAL,
+        paymentMethod TEXT,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL,
         FOREIGN KEY (groupId) REFERENCES groups (id),
         FOREIGN KEY (organizerId) REFERENCES users (id)
+      )
+    ''');
+
+    // Event Analytics table
+    await db.execute('''
+      CREATE TABLE event_analytics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        eventId INTEGER NOT NULL,
+        viewCount INTEGER DEFAULT 0,
+        shareCount INTEGER DEFAULT 0,
+        clickCount INTEGER DEFAULT 0,
+        lastUpdated TEXT NOT NULL,
+        FOREIGN KEY (eventId) REFERENCES events (id)
       )
     ''');
 
@@ -683,7 +745,7 @@ class DatabaseService {
     });
   }
 
-  // Event methods
+  // Event methods - updated to handle schema changes
   Future<int> insertEvent(Map<String, dynamic> event) async {
     final db = await database;
 
@@ -694,8 +756,66 @@ class DatabaseService {
     if (!event.containsKey('updatedAt')) {
       event['updatedAt'] = DateTime.now().toIso8601String();
     }
+    
+    // Check and update the database schema if needed
+    await _ensureEventSchemaUpdated(db);
+    
+    // Convert boolean isPrivate to integer (SQLite doesn't have boolean type)
+    if (event.containsKey('isPrivate') && event['isPrivate'] is bool) {
+      event['isPrivate'] = event['isPrivate'] ? 1 : 0;
+    }
 
     return await db.insert('events', event);
+  }
+  
+  // Helper method to make sure the events table has all required columns
+  Future<void> _ensureEventSchemaUpdated(Database db) async {
+    try {
+      // Check for isPrivate column - if this doesn't throw an error, the column exists
+      await db.rawQuery('SELECT isPrivate FROM events LIMIT 1');
+    } catch (e) {
+      // Column doesn't exist, add it
+      await db.execute('ALTER TABLE events ADD COLUMN isPrivate INTEGER DEFAULT 0');
+      print('Added isPrivate column to events table');
+    }
+
+    try {
+      // Check for price column
+      await db.rawQuery('SELECT price FROM events LIMIT 1');
+    } catch (e) {
+      // Column doesn't exist, add it
+      await db.execute('ALTER TABLE events ADD COLUMN price REAL');
+      print('Added price column to events table');
+    }
+
+    try {
+      // Check for paymentMethod column
+      await db.rawQuery('SELECT paymentMethod FROM events LIMIT 1');
+    } catch (e) {
+      // Column doesn't exist, add it
+      await db.execute('ALTER TABLE events ADD COLUMN paymentMethod TEXT');
+      print('Added paymentMethod column to events table');
+    }
+  }
+
+  // Safe method to insert event - includes schema checking
+  Future<int> safeInsertEventWithSchemaCheck(Map<String, dynamic> event) async {
+    try {
+      return await insertEvent(event);
+    } catch (e) {
+      print('Error inserting event: $e');
+      // Check if the error is related to missing columns
+      if (e.toString().contains('no column named')) {
+        print('Attempting to fix database schema...');
+        final db = await database;
+        await _ensureEventSchemaUpdated(db);
+        // Try again
+        return await insertEvent(event);
+      } else {
+        // If it's some other error, rethrow it
+        rethrow;
+      }
+    }
   }
 
   Future<List<Event>> getEvents({
@@ -782,6 +902,11 @@ class DatabaseService {
 
     // Add update timestamp
     event['updatedAt'] = DateTime.now().toIso8601String();
+    
+    // Convert boolean isPrivate to integer for SQLite
+    if (event.containsKey('isPrivate') && event['isPrivate'] is bool) {
+      event['isPrivate'] = event['isPrivate'] ? 1 : 0;
+    }
 
     return await db.update(
       'events',
@@ -991,7 +1116,7 @@ class DatabaseService {
 
     return true; // User wasn't attending
   }
-
+  
   // Story methods
   Future<int> insertStory(Map<String, dynamic> story) async {
     final db = await database;
@@ -1012,42 +1137,79 @@ class DatabaseService {
       return Story.fromMap(maps[i]);
     });
   }
-Future<List<Message>> getMessages({int? senderId, int? receiverId, int? groupId}) async {
-  final db = await database;
 
-  String whereClause = '';
-  List<dynamic> whereArgs = [];
+  Future<Story?> getStoryById(int id) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'stories',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
 
-  if (groupId != null) {
-    // Group messages
-    whereClause = 'groupId = ?';
-    whereArgs.add(groupId);
-  } else if (senderId != null && receiverId != null) {
-    // Direct messages between two users
-    whereClause =
-        '(senderId = ? AND receiverId = ?) OR (senderId = ? AND receiverId = ?)';
-    whereArgs.add(senderId);
-    whereArgs.add(receiverId);
-    whereArgs.add(receiverId);
-    whereArgs.add(senderId);
+    if (maps.isNotEmpty) {
+      return Story.fromMap(maps.first);
+    }
+    return null;
   }
 
-  final List<Map<String, dynamic>> maps = await db.query(
-    'messages',
-    where: whereClause.isNotEmpty ? whereClause : null,
-    whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
-    orderBy: 'timestamp ASC',
-  );
+  Future<int> updateStory(Map<String, dynamic> story) async {
+    final db = await database;
+    return await db.update(
+      'stories',
+      story,
+      where: 'id = ?',
+      whereArgs: [story['id']],
+    );
+  }
 
-  return List.generate(maps.length, (i) {
-    return Message.fromMap(maps[i]);
-  });
-}
-Future<int> insertMessage(Map<String, dynamic> message) async {
-  final db = await database;
-  return await db.insert('messages', message);
-}
+  Future<int> deleteStory(int id) async {
+    final db = await database;
+    return await db.delete(
+      'stories',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
   
+  // Message methods
+  Future<List<Message>> getMessages(
+      {int? senderId, int? receiverId, int? groupId}) async {
+    final db = await database;
+
+    String whereClause = '';
+    List<dynamic> whereArgs = [];
+
+    if (groupId != null) {
+      // Group messages
+      whereClause = 'groupId = ?';
+      whereArgs.add(groupId);
+    } else if (senderId != null && receiverId != null) {
+      // Direct messages between two users
+      whereClause =
+          '(senderId = ? AND receiverId = ?) OR (senderId = ? AND receiverId = ?)';
+      whereArgs.add(senderId);
+      whereArgs.add(receiverId);
+      whereArgs.add(receiverId);
+      whereArgs.add(senderId);
+    }
+
+    final List<Map<String, dynamic>> maps = await db.query(
+      'messages',
+      where: whereClause.isNotEmpty ? whereClause : null,
+      whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
+      orderBy: 'timestamp ASC',
+    );
+
+    return List.generate(maps.length, (i) {
+      return Message.fromMap(maps[i]);
+    });
+  }
+
+  Future<int> insertMessage(Map<String, dynamic> message) async {
+    final db = await database;
+    return await db.insert('messages', message);
+  }
+
   // Mark message as read
   Future<int> markMessageAsRead(int messageId) async {
     final db = await database;
@@ -1060,9 +1222,10 @@ Future<int> insertMessage(Map<String, dynamic> message) async {
   }
 
   // Mark all messages in a conversation as read
-  Future<int> markAllMessagesAsRead({int? senderId, int? receiverId, int? groupId}) async {
+  Future<int> markAllMessagesAsRead(
+      {int? senderId, int? receiverId, int? groupId}) async {
     final db = await database;
-    
+
     String whereClause = '';
     List<dynamic> whereArgs = [];
 
@@ -1085,37 +1248,37 @@ Future<int> insertMessage(Map<String, dynamic> message) async {
       whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
     );
   }
-  
+
   // Get unread messages count
   Future<int> getUnreadMessagesCount(int userId) async {
     final db = await database;
-    
+
     final result = await db.rawQuery('''
       SELECT COUNT(*) as count
       FROM messages
       WHERE receiverId = ? AND isRead = 0
     ''', [userId]);
-    
+
     return Sqflite.firstIntValue(result) ?? 0;
   }
-  
+
   // Store file attachments with messages
   Future<int> storeFileAttachment(Map<String, dynamic> message) async {
     // This function is similar to insertMessage but ensures file fields are present
     final db = await database;
-    
+
     // Make sure timestamp is in proper format
     if (message['timestamp'] is DateTime) {
       message['timestamp'] = message['timestamp'].toIso8601String();
     }
-    
+
     return await db.insert('messages', message);
   }
   
   // Get chat conversations list
   Future<List<Map<String, dynamic>>> getChatConversations(int userId) async {
     final db = await database;
-    
+
     // This query gets the most recent message for each conversation
     // and counts unread messages
     final List<Map<String, dynamic>> results = await db.rawQuery('''
@@ -1167,7 +1330,7 @@ Future<int> insertMessage(Map<String, dynamic> message) async {
       userId, userId, userId, // For filtering messages related to the user
       userId // For grouping
     ]);
-    
+
     return results;
   }
 
@@ -1209,5 +1372,400 @@ Future<int> insertMessage(Map<String, dynamic> message) async {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+  
+  // Implementation for story likes functionality
+  Future<void> toggleLikeStory(int storyId, int userId) async {
+    final db = await database;
+
+    // Check if there's a story_likes table, create if it doesn't exist
+    await db.execute('''
+    CREATE TABLE IF NOT EXISTS story_likes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      storyId INTEGER NOT NULL,
+      userId INTEGER NOT NULL,
+      createdAt TEXT NOT NULL,
+      FOREIGN KEY (storyId) REFERENCES stories (id),
+      FOREIGN KEY (userId) REFERENCES users (id)
+    )
+  ''');
+
+    // Start a transaction
+    await db.transaction((txn) async {
+      // Check if user already liked this story
+      final List<Map<String, dynamic>> existingLikes = await txn.query(
+        'story_likes',
+        where: 'storyId = ? AND userId = ?',
+        whereArgs: [storyId, userId],
+      );
+
+      if (existingLikes.isEmpty) {
+        // User hasn't liked the story yet, add like
+        await txn.insert('story_likes', {
+          'storyId': storyId,
+          'userId': userId,
+          'createdAt': DateTime.now().toIso8601String(),
+        });
+
+        // Increment likes count
+        await txn.rawUpdate(
+          'UPDATE stories SET likesCount = likesCount + 1 WHERE id = ?',
+          [storyId],
+        );
+      } else {
+        // User already liked the story, remove like
+        await txn.delete(
+          'story_likes',
+          where: 'storyId = ? AND userId = ?',
+          whereArgs: [storyId, userId],
+        );
+
+        // Decrement likes count (ensuring it doesn't go below 0)
+        await txn.rawUpdate(
+          'UPDATE stories SET likesCount = MAX(0, likesCount - 1) WHERE id = ?',
+          [storyId],
+        );
+      }
+    });
+  }
+
+  // Check if a user has liked a story
+  Future<bool> hasUserLikedStory(int storyId, int userId) async {
+    final db = await database;
+
+    // Check if the story_likes table exists
+    final List<Map<String, dynamic>> tables = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='story_likes'",
+    );
+
+    if (tables.isEmpty) {
+      // Table doesn't exist yet, so user hasn't liked anything
+      return false;
+    }
+
+    final List<Map<String, dynamic>> likes = await db.query(
+      'story_likes',
+      where: 'storyId = ? AND userId = ?',
+      whereArgs: [storyId, userId],
+    );
+
+    return likes.isNotEmpty;
+  }
+
+  // Get stories liked by a user
+  Future<List<Story>> getStoriesLikedByUser(int userId) async {
+    final db = await database;
+
+    // Check if the story_likes table exists
+    final List<Map<String, dynamic>> tables = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='story_likes'",
+    );
+
+    if (tables.isEmpty) {
+      // Table doesn't exist yet
+      return [];
+    }
+
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+    SELECT s.*
+    FROM stories s
+    JOIN story_likes sl ON s.id = sl.storyId
+    WHERE sl.userId = ?
+    ORDER BY sl.createdAt DESC
+  ''', [userId]);
+
+    return List.generate(results.length, (i) {
+      return Story.fromMap(results[i]);
+    });
+  }
+  
+  // Get users who liked a story
+  Future<List<User>> getUsersWhoLikedStory(int storyId) async {
+    final db = await database;
+
+    // Check if the story_likes table exists
+    final List<Map<String, dynamic>> tables = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='story_likes'",
+    );
+
+    if (tables.isEmpty) {
+      // Table doesn't exist yet
+      return [];
+    }
+
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+    SELECT u.*
+    FROM users u
+    JOIN story_likes sl ON u.id = sl.userId
+    WHERE sl.storyId = ?
+    ORDER BY sl.createdAt DESC
+  ''', [storyId]);
+
+    return List.generate(results.length, (i) {
+      return User.fromMap(results[i]);
+    });
+  }
+
+  // For testing - reset likes for a story
+  Future<void> resetStoryLikes(int storyId) async {
+    final db = await database;
+
+    await db.transaction((txn) async {
+      // Delete all likes for this story
+      await txn.delete(
+        'story_likes',
+        where: 'storyId = ?',
+        whereArgs: [storyId],
+      );
+
+      // Reset like count to 0
+      await txn.update(
+        'stories',
+        {'likesCount': 0},
+        where: 'id = ?',
+        whereArgs: [storyId],
+      );
+    });
+  }
+
+  // Event Analytics methods
+  Future<int> insertEventAnalytics(Map<String, dynamic> analytics) async {
+    final db = await database;
+    
+    // Ensure the table exists
+    try {
+      await db.query('event_analytics', limit: 1);
+    } catch (e) {
+      // Table doesn't exist, create it
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS event_analytics (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          eventId INTEGER NOT NULL,
+          viewCount INTEGER DEFAULT 0,
+          shareCount INTEGER DEFAULT 0,
+          clickCount INTEGER DEFAULT 0,
+          lastUpdated TEXT NOT NULL,
+          FOREIGN KEY (eventId) REFERENCES events (id)
+        )
+      ''');
+    }
+    
+    // Set lastUpdated if not provided
+    if (!analytics.containsKey('lastUpdated')) {
+      analytics['lastUpdated'] = DateTime.now().toIso8601String();
+    }
+    
+    return await db.insert('event_analytics', analytics);
+  }
+  
+  Future<EventAnalytics?> getEventAnalytics(int eventId) async {
+    final db = await database;
+    
+    try {
+      final List<Map<String, dynamic>> maps = await db.query(
+        'event_analytics',
+        where: 'eventId = ?',
+        whereArgs: [eventId],
+      );
+      
+      if (maps.isNotEmpty) {
+        return EventAnalytics.fromMap(maps.first);
+      }
+      
+      // If no analytics exist for this event, create default entry
+      final id = await insertEventAnalytics({
+        'eventId': eventId,
+        'viewCount': 0,
+        'shareCount': 0,
+        'clickCount': 0,
+        'lastUpdated': DateTime.now().toIso8601String(),
+      });
+      
+      final newMaps = await db.query(
+        'event_analytics',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      
+      if (newMaps.isNotEmpty) {
+        return EventAnalytics.fromMap(newMaps.first);
+      }
+    } catch (e) {
+      print('Error getting event analytics: $e');
+      // The table might not exist yet
+    }
+    
+    return null;
+  }
+  
+  Future<void> incrementEventViewCount(int eventId) async {
+    final db = await database;
+    
+    try {
+      // First check if analytics exist for this event
+      final analytics = await getEventAnalytics(eventId);
+      
+      if (analytics != null) {
+        // Update existing record
+        await db.update(
+          'event_analytics',
+          {
+            'viewCount': analytics.viewCount + 1,
+            'lastUpdated': DateTime.now().toIso8601String(),
+          },
+          where: 'eventId = ?',
+          whereArgs: [eventId],
+        );
+      } else {
+        // Create new record
+        await insertEventAnalytics({
+          'eventId': eventId,
+          'viewCount': 1,
+          'shareCount': 0,
+          'clickCount': 0,
+          'lastUpdated': DateTime.now().toIso8601String(),
+        });
+      }
+    } catch (e) {
+      print('Error incrementing view count: $e');
+    }
+  }
+  
+  Future<void> incrementEventShareCount(int eventId) async {
+    final db = await database;
+    
+    try {
+      // First check if analytics exist for this event
+      final analytics = await getEventAnalytics(eventId);
+      
+      if (analytics != null) {
+        // Update existing record
+        await db.update(
+          'event_analytics',
+          {
+            'shareCount': analytics.shareCount + 1,
+            'lastUpdated': DateTime.now().toIso8601String(),
+          },
+          where: 'eventId = ?',
+          whereArgs: [eventId],
+        );
+      } else {
+        // Create new record
+        await insertEventAnalytics({
+          'eventId': eventId,
+          'viewCount': 0,
+          'shareCount': 1,
+          'clickCount': 0,
+          'lastUpdated': DateTime.now().toIso8601String(),
+        });
+      }
+    } catch (e) {
+      print('Error incrementing share count: $e');
+    }
+  }
+  
+  Future<void> incrementEventClickCount(int eventId) async {
+    final db = await database;
+    
+    try {
+      // First check if analytics exist for this event
+      final analytics = await getEventAnalytics(eventId);
+      
+      if (analytics != null) {
+        // Update existing record
+        await db.update(
+          'event_analytics',
+          {
+            'clickCount': analytics.clickCount + 1,
+            'lastUpdated': DateTime.now().toIso8601String(),
+          },
+          where: 'eventId = ?',
+          whereArgs: [eventId],
+        );
+      } else {
+        // Create new record
+        await insertEventAnalytics({
+          'eventId': eventId,
+          'viewCount': 0,
+          'shareCount': 0,
+          'clickCount': 1,
+          'lastUpdated': DateTime.now().toIso8601String(),
+        });
+      }
+    } catch (e) {
+      print('Error incrementing click count: $e');
+    }
+  }
+  
+  // Check if table needs updating
+  Future<void> updateEventTableIfNeeded() async {
+    final db = await database;
+
+    // Check if isPrivate column exists
+    try {
+      await db.rawQuery('SELECT isPrivate FROM events LIMIT 1');
+    } catch (e) {
+      // Column doesn't exist, add it
+      await db
+          .execute('ALTER TABLE events ADD COLUMN isPrivate INTEGER DEFAULT 0');
+    }
+
+    // Check if price column exists
+    try {
+      await db.rawQuery('SELECT price FROM events LIMIT 1');
+    } catch (e) {
+      // Column doesn't exist, add it
+      await db.execute('ALTER TABLE events ADD COLUMN price REAL');
+    }
+
+    // Check if paymentMethod column exists
+    try {
+      await db.rawQuery('SELECT paymentMethod FROM events LIMIT 1');
+    } catch (e) {
+      // Column doesn't exist, add it
+      await db.execute('ALTER TABLE events ADD COLUMN paymentMethod TEXT');
+    }
+  }
+  
+  // Get users by IDs
+  Future<List<User>> getUsersByIds(List<int> userIds) async {
+    if (userIds.isEmpty) {
+      return [];
+    }
+
+    final db = await database;
+    final List<User> users = [];
+
+    // Process each ID individually to avoid SQL injection issues
+    for (final userId in userIds) {
+      final List<Map<String, dynamic>> maps = await db.query(
+        'users',
+        where: 'id = ?',
+        whereArgs: [userId],
+      );
+
+      if (maps.isNotEmpty) {
+        users.add(User.fromMap(maps.first));
+      }
+    }
+
+    return users;
+  }
+  
+  // Safe method to insert event that ensures the database schema is ready
+  Future<int> safeInsertEvent(Map<String, dynamic> event) async {
+    try {
+      return await insertEvent(event);
+    } catch (e) {
+      if (e.toString().contains('no column named isPrivate')) {
+        // Fix the database schema
+        await updateEventTableIfNeeded();
+        // Try again
+        return await insertEvent(event);
+      } else {
+        // If it's some other error, rethrow it
+        rethrow;
+      }
+    }
   }
 }

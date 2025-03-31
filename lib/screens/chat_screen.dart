@@ -8,7 +8,6 @@ import 'package:turikumwe/services/database_service.dart';
 import 'package:turikumwe/services/file_service.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 
 class ChatScreen extends StatefulWidget {
   final int chatId;   // Ensure this is explicitly typed as int
@@ -362,8 +361,8 @@ class _ChatScreenState extends State<ChatScreen> {
           receiverId: recipientId, // Use the ensured int value
           groupId: widget.isGroup ? recipientId : null,
           content: messageText.isEmpty 
-              ? '[${_fileType}] ${_selectedFileName}' 
-              : '$messageText\n[${_fileType}] ${_selectedFileName}',
+              ? '[$_fileType] $_selectedFileName' 
+              : '$messageText\n[$_fileType] $_selectedFileName',
           timestamp: DateTime.now(),
           isRead: false,
           fileUrl: 'pending_upload', // Will be updated when upload is complete
@@ -385,13 +384,8 @@ class _ChatScreenState extends State<ChatScreen> {
         try {
           final result = await _databaseService.insertMessage(messageData);
           // TYPE FIX: Ensure result is treated as int
-          if (result is int) {
-            messageId = result;
-          } else if (result != null) {
-            // Try to parse the result as int
-            messageId = int.tryParse(result.toString()) ?? 0;
-          }
-        } catch (e) {
+          messageId = result;
+                } catch (e) {
           print('Error inserting message: $e');
           messageId = 0;
         }
