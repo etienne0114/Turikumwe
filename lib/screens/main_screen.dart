@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/constants/app_strings.dart';
 import 'package:turikumwe/screens/create_event_screen.dart';
+import 'package:turikumwe/screens/create_post_screen.dart';
 import 'package:turikumwe/screens/events_screen.dart';
 import 'package:turikumwe/screens/groups/create_group_screen.dart';
 import 'package:turikumwe/screens/groups/groups_list_screen.dart';
@@ -64,6 +65,16 @@ class _MainScreenState extends State<MainScreen> {
       });
     } catch (e) {
       print('Error loading unread counts: $e');
+    }
+  }
+
+  // Refresh the Home Feed
+  void _refreshHomeFeed() {
+    if (_currentIndex == 0) {
+      setState(() {
+        // Replace the home feed screen with a new instance to force refresh
+        _screens[0] = const HomeFeedScreen();
+      });
     }
   }
 
@@ -315,6 +326,17 @@ class _MainScreenState extends State<MainScreen> {
                   onTap: () {
                     Navigator.pop(context);
                     // Navigate to create post screen
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CreatePostScreen(),
+                      ),
+                    ).then((value) {
+                      // If post was created successfully, refresh home feed
+                      if (value == true) {
+                        _refreshHomeFeed();
+                      }
+                    });
                   },
                 ),
                 ListTile(
@@ -325,6 +347,7 @@ class _MainScreenState extends State<MainScreen> {
                   title: const Text('Create Group'),
                   subtitle: const Text('Start a new community group'),
                   onTap: () {
+                    Navigator.pop(context); // Close the modal first
                     Navigator.push(
                       context,
                       MaterialPageRoute(builder: (context) => const CreateGroupScreen()),

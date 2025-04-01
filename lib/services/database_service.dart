@@ -332,7 +332,7 @@ class DatabaseService {
   }
 
   // Post methods
-  Future<int> insertPost(Map<String, dynamic> post) async {
+  Future<int> addPost(Map<String, dynamic> post) async {
     final db = await database;
     return await db.insert('posts', post);
   }
@@ -383,7 +383,7 @@ class DatabaseService {
   }
 
 // Get latest posts for feed with user details
-  Future<List<Map<String, dynamic>>> getHomeFeeds() async {
+  Future<List<Map<String, dynamic>>> fetchHomeFeeds() async {
     final db = await database;
 
     // Join posts with users to get user details
@@ -1766,6 +1766,457 @@ class DatabaseService {
         // If it's some other error, rethrow it
         rethrow;
       }
+    }
+  }
+  Future<int> insertPost(Map<String, dynamic> post) async {
+    final db = await database;
+    return await db.insert('posts', post);
+  }
+
+  // Get a post by ID
+  Future<Post?> getPostById(int id) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'posts',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    if (maps.isNotEmpty) {
+      return Post.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  // Delete a post
+  Future<int> deletePost(int id) async {
+    final db = await database;
+    
+    // Start a transaction to delete associated data
+    return await db.transaction((txn) async {
+      // Delete comments associated with this post
+      await txn.delete(
+        'comments',
+        where: 'postId = ?',
+        whereArgs: [id],
+      );
+      
+      // Delete post likes (if you have a post_likes table)
+      try {
+        await txn.delete(
+          'post_likes',
+          where: 'postId = ?',
+          whereArgs: [id],
+        );
+      } catch (e) {
+        // Table might not exist, that's okay
+        print('No post_likes table found: $e');
+      }
+      
+      // Delete the post itself
+      return await txn.delete(
+        'posts',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    });
+  }
+  
+  // Get posts for the home feed - personal posts and group posts
+  Future<List<Map<String, dynamic>>> getHomeFeeds() async {
+    final db = await database;
+
+    // Join posts with users to get user details
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+    SELECT p.*, u.name as userName, u.profilePicture,
+           g.name as groupName, g.id as groupId
+    FROM posts p
+    LEFT JOIN users u ON p.userId = u.id
+    LEFT JOIN groups g ON p.groupId = g.id
+    ORDER BY p.createdAt DESC
+    LIMIT 50
+  ''');
+
+    return results;
+  }
+  
+  // Add a comment to a post
+  Future<int> addComment(Map<String, dynamic> comment) async {
+    final db = await database;
+    
+    // Insert the comment
+    final commentId = await db.insert('comments', comment);
+    
+    // Increment the comments count on the post
+    if (commentId > 0) {
+      await db.rawUpdate(
+        'UPDATE posts SET commentsCount = commentsCount + 1 WHERE id = ?',
+        [comment['postId']],
+      );
+    }
+    
+    return commentId;
+  }
+  
+  // Get comments for a post
+  Future<List<Map<String, dynamic>>> getCommentsForPost(int postId) async {
+    final db = await database;
+    
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+    SELECT c.*, u.name as userName, u.profilePicture
+    FROM comments c
+    LEFT JOIN users u ON c.userId = u.id
+    WHERE c.postId = ?
+    ORDER BY c.createdAt ASC
+  ''', [postId]);
+    
+    return results;
+  }
+  
+  // Toggle like on a post
+  Future<bool> toggleLikePost(int postId, int userId) async {
+    final db = await database;
+    
+    // Check if post_likes table exists, create if it doesn't
+    await db.execute('''
+    CREATE TABLE IF NOT EXISTS post_likes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      postId INTEGER NOT NULL,
+      userId INTEGER NOT NULL,
+      createdAt TEXT NOT NULL,
+      FOREIGN KEY (postId) REFERENCES posts (id),
+      FOREIGN KEY (userId) REFERENCES users (id)
+    )
+  ''');
+    
+    // Check if user already liked the post
+    final List<Map<String, dynamic>> existingLikes = await db.query(
+      'post_likes',
+      where: 'postId = ? AND userId = ?',
+      whereArgs: [postId, userId],
+    );
+    
+    // If user has already liked the post, unlike it
+    if (existingLikes.isNotEmpty) {
+      await db.transaction((txn) async {
+        // Delete the like record
+        await txn.delete(
+          'post_likes',
+          where: 'postId = ? AND userId = ?',
+          whereArgs: [postId, userId],
+        );
+        
+        // Decrement the likes count
+        await txn.rawUpdate(
+          'UPDATE posts SET likesCount = MAX(0, likesCount - 1) WHERE id = ?',
+          [postId],
+        );
+      });
+      
+      return false; // Returning false means the post is now unliked
+    } 
+    // Otherwise, like the post
+    else {
+      await db.transaction((txn) async {
+        // Insert like record
+        await txn.insert('post_likes', {
+          'postId': postId,
+          'userId': userId,
+          'createdAt': DateTime.now().toIso8601String(),
+        });
+        
+        // Increment the likes count
+        await txn.rawUpdate(
+          'UPDATE posts SET likesCount = likesCount + 1 WHERE id = ?',
+          [postId],
+        );
+      });
+      
+      return true; // Returning true means the post is now liked
+    }
+  }
+  
+  // Check if user has liked a post
+  Future<bool> hasUserLikedPost(int postId, int userId) async {
+    final db = await database;
+    
+    // Check if post_likes table exists
+    final List<Map<String, dynamic>> tables = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='post_likes'",
+    );
+    
+    if (tables.isEmpty) {
+      return false; // Table doesn't exist yet
+    }
+    
+    // Check for like record
+    final List<Map<String, dynamic>> likes = await db.query(
+      'post_likes',
+      where: 'postId = ? AND userId = ?',
+      whereArgs: [postId, userId],
+    );
+    
+    return likes.isNotEmpty;
+  }
+  Future<bool> deleteComment(int commentId) async {
+    final db = await database;
+    
+    try {
+      // Start a transaction to update post comment count and delete the comment
+      return await db.transaction((txn) async {
+        // Get the comment to find the associated post
+        final List<Map<String, dynamic>> comments = await txn.query(
+          'comments',
+          where: 'id = ?',
+          whereArgs: [commentId],
+        );
+        
+        if (comments.isEmpty) {
+          return false;
+        }
+        
+        final postId = comments.first['postId'] as int;
+        
+        // Delete the comment
+        final deleteResult = await txn.delete(
+          'comments',
+          where: 'id = ?',
+          whereArgs: [commentId],
+        );
+        
+        if (deleteResult > 0) {
+          // Decrement the comments count on the post
+          await txn.rawUpdate(
+            'UPDATE posts SET commentsCount = MAX(0, commentsCount - 1) WHERE id = ?',
+            [postId],
+          );
+          return true;
+        }
+        
+        return false;
+      });
+    } catch (e) {
+      print('Error deleting comment: $e');
+      return false;
+    }
+  }
+  
+  // Get user's comments
+  Future<List<Map<String, dynamic>>> getUserComments(int userId) async {
+    final db = await database;
+    
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+      SELECT c.*, p.content as postContent, p.userId as postUserId,
+             u.name as postAuthorName, u.profilePicture as postAuthorPicture
+      FROM comments c
+      JOIN posts p ON c.postId = p.id
+      JOIN users u ON p.userId = u.id
+      WHERE c.userId = ?
+      ORDER BY c.createdAt DESC
+    ''', [userId]);
+    
+    return results;
+  }
+  
+  // Get popular posts (most comments and likes)
+  Future<List<Post>> getPopularPosts({int limit = 10}) async {
+    final db = await database;
+    
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT * FROM posts
+      ORDER BY (likesCount + commentsCount) DESC
+      LIMIT ?
+    ''', [limit]);
+    
+    return List.generate(maps.length, (i) {
+      return Post.fromMap(maps[i]);
+    });
+  }
+  
+  // Search for posts by content
+  Future<List<Post>> searchPosts(String query) async {
+    final db = await database;
+    
+    final List<Map<String, dynamic>> maps = await db.query(
+      'posts',
+      where: 'content LIKE ?',
+      whereArgs: ['%$query%'],
+      orderBy: 'createdAt DESC',
+    );
+    
+    return List.generate(maps.length, (i) {
+      return Post.fromMap(maps[i]);
+    });
+  }
+  
+  // Get detailed post data including author and group info
+  Future<Map<String, dynamic>?> getPostDetails(int postId) async {
+    final db = await database;
+    
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+      SELECT p.*, u.name as authorName, u.profilePicture as authorProfilePicture,
+             g.name as groupName, g.id as groupId, g.image as groupImage
+      FROM posts p
+      LEFT JOIN users u ON p.userId = u.id
+      LEFT JOIN groups g ON p.groupId = g.id
+      WHERE p.id = ?
+    ''', [postId]);
+    
+    if (results.isEmpty) {
+      return null;
+    }
+    
+    return results.first;
+  }
+  
+  // Get recent comments for a post
+  Future<List<Map<String, dynamic>>> getRecentCommentsForPost(int postId, {int limit = 3}) async {
+    final db = await database;
+    
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+      SELECT c.*, u.name as userName, u.profilePicture as userProfilePicture
+      FROM comments c
+      JOIN users u ON c.userId = u.id
+      WHERE c.postId = ?
+      ORDER BY c.createdAt DESC
+      LIMIT ?
+    ''', [postId, limit]);
+    
+    return results;
+  }
+   Future<void> incrementShareCount(int postId) async {
+    final db = await database;
+    
+    try {
+      // Update the share count in a dedicated analytics table if it exists
+      try {
+        await db.rawQuery('SELECT * FROM post_analytics LIMIT 1');
+        
+        // Check if this post has an analytics entry
+        final List<Map<String, dynamic>> analytics = await db.query(
+          'post_analytics',
+          where: 'postId = ?',
+          whereArgs: [postId],
+        );
+        
+        if (analytics.isEmpty) {
+          // Create new analytics entry
+          await db.insert('post_analytics', {
+            'postId': postId,
+            'shareCount': 1,
+            'viewCount': 0,
+            'lastUpdated': DateTime.now().toIso8601String(),
+          });
+        } else {
+          // Update existing entry
+          await db.update(
+            'post_analytics',
+            {
+              'shareCount': analytics.first['shareCount'] + 1,
+              'lastUpdated': DateTime.now().toIso8601String(),
+            },
+            where: 'postId = ?',
+            whereArgs: [postId],
+          );
+        }
+      } catch (e) {
+        // Table doesn't exist, create it
+        print('Creating post_analytics table');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS post_analytics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            postId INTEGER NOT NULL,
+            viewCount INTEGER DEFAULT 0,
+            shareCount INTEGER DEFAULT 0,
+            lastUpdated TEXT NOT NULL,
+            FOREIGN KEY (postId) REFERENCES posts (id)
+          )
+        ''');
+        
+        // Then create the entry
+        await db.insert('post_analytics', {
+          'postId': postId,
+          'shareCount': 1,
+          'viewCount': 0,
+          'lastUpdated': DateTime.now().toIso8601String(),
+        });
+      }
+      
+      // Also update the likes count in the post itself if you want to track it there
+      // This is optional but can be useful for quick access
+      await db.rawUpdate(
+        'UPDATE posts SET sharesCount = COALESCE(sharesCount, 0) + 1 WHERE id = ?',
+        [postId],
+      );
+    } catch (e) {
+      print('Error incrementing share count: $e');
+      // Don't rethrow, as this is a non-critical operation
+    }
+  }
+  
+  // Share a post
+  Future<bool> sharePost(int postId, int userId, String shareType) async {
+    final db = await database;
+    
+    try {
+      // Record the share activity
+      await db.insert('share_activity', {
+        'postId': postId,
+        'userId': userId,
+        'shareType': shareType, // e.g., 'external', 'internal'
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+      
+      // Increment the share count
+      await incrementShareCount(postId);
+      
+      return true;
+    } catch (e) {
+      print('Error recording share: $e');
+      
+      // Try to create the table if it doesn't exist
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS share_activity (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            postId INTEGER NOT NULL,
+            userId INTEGER NOT NULL,
+            shareType TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            FOREIGN KEY (postId) REFERENCES posts (id),
+            FOREIGN KEY (userId) REFERENCES users (id)
+          )
+        ''');
+        
+        // Try again after creating the table
+        await db.insert('share_activity', {
+          'postId': postId,
+          'userId': userId,
+          'shareType': shareType,
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+        
+        await incrementShareCount(postId);
+        
+        return true;
+      } catch (e2) {
+        print('Error creating share_activity table: $e2');
+        return false;
+      }
+    }
+  }
+  
+  // Update posts table to include sharesCount if it doesn't exist
+  Future<void> ensureSharesCountColumn() async {
+    final db = await database;
+    
+    try {
+      // Try to query the sharesCount column
+      await db.rawQuery('SELECT sharesCount FROM posts LIMIT 1');
+    } catch (e) {
+      // Column doesn't exist, add it
+      print('Adding sharesCount column to posts table');
+      await db.execute('ALTER TABLE posts ADD COLUMN sharesCount INTEGER DEFAULT 0');
     }
   }
 }

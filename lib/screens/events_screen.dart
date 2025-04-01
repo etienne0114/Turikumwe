@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/models/event.dart';
+import 'package:turikumwe/screens/auth/login_screen.dart';
 import 'package:turikumwe/screens/create_event_screen.dart';
 import 'package:turikumwe/screens/event_detail_screen.dart';
 import 'package:turikumwe/services/auth_service.dart';
 import 'package:turikumwe/services/database_service.dart';
 import 'package:turikumwe/utils/dialog_utils.dart';
 import 'package:turikumwe/widgets/event_card.dart';
+import 'package:turikumwe/widgets/event_calendar_view.dart';
+import 'package:turikumwe/widgets/event_filter.dart';
 
 class EventsScreen extends StatefulWidget {
   const EventsScreen({Key? key}) : super(key: key);
@@ -21,11 +24,13 @@ class _EventsScreenState extends State<EventsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   List<Event> _allEvents = [];
+  List<Event> _myEvents = [];
   bool _isLoading = true;
   String? _selectedCategory;
   String? _selectedDistrict;
   bool _upcomingOnly = true;
   String _searchQuery = '';
+  DateTime _selectedDate = DateTime.now();
 
   // Lists for categories and districts
   final List<String> _eventCategories = [
@@ -41,36 +46,12 @@ class _EventsScreenState extends State<EventsScreen>
   ];
 
   final List<String> _rwandanDistricts = [
-    'Bugesera',
-    'Burera',
-    'Gakenke',
-    'Gasabo',
-    'Gatsibo',
-    'Gicumbi',
-    'Gisagara',
-    'Huye',
-    'Kamonyi',
-    'Karongi',
-    'Kayonza',
-    'Kicukiro',
-    'Kirehe',
-    'Muhanga',
-    'Musanze',
-    'Ngoma',
-    'Ngororero',
-    'Nyabihu',
-    'Nyagatare',
-    'Nyamagabe',
-    'Nyamasheke',
-    'Nyanza',
-    'Nyarugenge',
-    'Nyaruguru',
-    'Rubavu',
-    'Ruhango',
-    'Rulindo',
-    'Rusizi',
-    'Rutsiro',
-    'Rwamagana',
+    'Bugesera', 'Burera', 'Gakenke', 'Gasabo', 'Gatsibo',
+    'Gicumbi', 'Gisagara', 'Huye', 'Kamonyi', 'Karongi',
+    'Kayonza', 'Kicukiro', 'Kirehe', 'Muhanga', 'Musanze',
+    'Ngoma', 'Ngororero', 'Nyabihu', 'Nyagatare', 'Nyamagabe',
+    'Nyamasheke', 'Nyanza', 'Nyarugenge', 'Nyaruguru', 'Rubavu',
+    'Ruhango', 'Rulindo', 'Rusizi', 'Rutsiro', 'Rwamagana',
   ];
 
   final TextEditingController _searchController = TextEditingController();
@@ -101,8 +82,10 @@ class _EventsScreenState extends State<EventsScreen>
           _searchQuery = '';
           _searchController.clear();
         });
-        _loadEvents();
       }
+      
+      // Refresh data when switching tabs
+      _loadEvents();
     }
   }
 
@@ -126,21 +109,49 @@ class _EventsScreenState extends State<EventsScreen>
         events = await _searchEvents(_searchQuery);
       } else if (_selectedCategory != null) {
         // Filter by category
-        events = await _getEventsByCategory(_selectedCategory!);
+        events = await DatabaseService().getEvents(
+          fromDate: fromDate,
+          category: _selectedCategory,
+        );
       } else if (_selectedDistrict != null) {
         // Filter by district
-        events = await _getEventsByDistrict(_selectedDistrict!);
+        events = await DatabaseService().getEvents(
+          fromDate: fromDate,
+          district: _selectedDistrict,
+        );
       } else {
         // Get all events
         events = await DatabaseService().getEvents(
           fromDate: fromDate,
-          district: currentUser?.district,
         );
+      }
+      
+      // Make sure we actually have events loaded
+      if (events.isEmpty) {
+        // Try without any filters as a fallback
+        events = await DatabaseService().getEvents();
+        debugPrint('Loaded ${events.length} events without filters');
+      } else {
+        debugPrint('Loaded ${events.length} events with filters');
+      }
+      
+      // Sort events by date (upcoming first)
+      events.sort((a, b) => a.date.compareTo(b.date));
+      
+      // Load "My Events" data if user is logged in
+      List<Event> myEvents = [];
+      if (currentUser != null) {
+        myEvents = await DatabaseService().getEventsUserIsAttending(currentUser.id);
+        debugPrint('Loaded ${myEvents.length} events for user ${currentUser.id}');
+        
+        // Sort my events by date (upcoming first)
+        myEvents.sort((a, b) => a.date.compareTo(b.date));
       }
 
       if (mounted) {
         setState(() {
           _allEvents = events;
+          _myEvents = myEvents;
           _isLoading = false;
         });
       }
@@ -154,6 +165,68 @@ class _EventsScreenState extends State<EventsScreen>
         DialogUtils.showErrorSnackBar(
           context,
           message: 'Failed to load events. Please try again.',
+        );
+      }
+    }
+  }
+  
+  // Method to delete an event
+  Future<void> _deleteEvent(Event event) async {
+    // Confirm deletion with dialog
+    final confirm = await DialogUtils.showConfirmationDialog(
+      context,
+      title: 'Delete Event',
+      message: 'Are you sure you want to delete this event?',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      isDangerous: true,
+    );
+    
+    if (!confirm) return;
+    
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      // Delete the event
+      final result = await DatabaseService().deleteEvent(event.id);
+      
+      if (result > 0) {
+        // Remove the event from our lists
+        setState(() {
+          _allEvents.removeWhere((e) => e.id == event.id);
+          _myEvents.removeWhere((e) => e.id == event.id);
+          _isLoading = false;
+        });
+        
+        if (mounted) {
+          DialogUtils.showSuccessSnackBar(
+            context,
+            message: 'Event deleted successfully',
+          );
+        }
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
+        
+        if (mounted) {
+          DialogUtils.showErrorSnackBar(
+            context,
+            message: 'Failed to delete event',
+          );
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      
+      if (mounted) {
+        DialogUtils.showErrorSnackBar(
+          context,
+          message: 'Error deleting event: ${e.toString()}',
         );
       }
     }
@@ -177,214 +250,26 @@ class _EventsScreenState extends State<EventsScreen>
     }).toList();
   }
 
-  // Helper method to get events by category
-  Future<List<Event>> _getEventsByCategory(String category) async {
-    final db = DatabaseService();
-    final allEvents = await db.getEvents();
-
-    // Filter events by category
-    return allEvents
-        .where(
-            (event) => event.category?.toLowerCase() == category.toLowerCase())
-        .toList();
-  }
-
-  // Helper method to get events by district
-  Future<List<Event>> _getEventsByDistrict(String district) async {
-    final db = DatabaseService();
-    final allEvents = await db.getEvents();
-
-    // Filter events by district
-    return allEvents
-        .where(
-            (event) => event.district?.toLowerCase() == district.toLowerCase())
-        .toList();
-  }
-
   void _showFilterSheet() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      backgroundColor: Colors.transparent,
+      builder: (context) => EventFilter(
+        categories: _eventCategories,
+        districts: _rwandanDistricts,
+        selectedCategory: _selectedCategory,
+        selectedDistrict: _selectedDistrict,
+        upcomingOnly: _upcomingOnly,
+        onFilterChanged: (category, district, upcoming) {
+          setState(() {
+            _selectedCategory = category;
+            _selectedDistrict = district;
+            _upcomingOnly = upcoming;
+          });
+          _loadEvents();
+        },
       ),
-      builder: (context) => _buildFilterSheet(),
-    );
-  }
-
-  Widget _buildFilterSheet() {
-    return StatefulBuilder(
-      builder: (context, setState) {
-        return Container(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            top: 16,
-            left: 16,
-            right: 16,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Handle bar
-              Center(
-                child: Container(
-                  height: 4,
-                  width: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Filter Events',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _selectedCategory = null;
-                        _selectedDistrict = null;
-                        _upcomingOnly = true;
-                      });
-                    },
-                    child: const Text('Reset'),
-                  ),
-                ],
-              ),
-
-              const Divider(),
-
-              // Upcoming toggle
-              SwitchListTile(
-                title: const Text('Show upcoming events only'),
-                value: _upcomingOnly,
-                onChanged: (value) {
-                  setState(() {
-                    _upcomingOnly = value;
-                  });
-                },
-                activeColor: AppColors.primary,
-              ),
-
-              const Divider(),
-
-              // Category selection
-              const Text(
-                'Category',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  FilterChip(
-                    label: const Text('All'),
-                    selected: _selectedCategory == null,
-                    onSelected: (selected) {
-                      setState(() {
-                        _selectedCategory = null;
-                      });
-                    },
-                    selectedColor: AppColors.primary.withOpacity(0.2),
-                  ),
-                  ..._eventCategories.map((category) {
-                    return FilterChip(
-                      label: Text(category),
-                      selected: _selectedCategory == category,
-                      onSelected: (selected) {
-                        setState(() {
-                          _selectedCategory = selected ? category : null;
-                        });
-                      },
-                      selectedColor: AppColors.primary.withOpacity(0.2),
-                    );
-                  }).toList(),
-                ],
-              ),
-
-              const SizedBox(height: 16),
-
-              // District selection
-              const Text(
-                'District',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              DropdownButtonFormField<String?>(
-                decoration: const InputDecoration(
-                  hintText: 'Select district',
-                  border: OutlineInputBorder(),
-                ),
-                value: _selectedDistrict,
-                items: [
-                  const DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text('All districts'),
-                  ),
-                  ..._rwandanDistricts.map((district) {
-                    return DropdownMenuItem<String>(
-                      value: district,
-                      child: Text(district),
-                    );
-                  }).toList(),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _selectedDistrict = value;
-                  });
-                },
-              ),
-
-              const SizedBox(height: 24),
-
-              // Apply button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    this.setState(() {
-                      // Update main state with filter values
-                      _selectedCategory = _selectedCategory;
-                      _selectedDistrict = _selectedDistrict;
-                      _upcomingOnly = _upcomingOnly;
-                    });
-                    _loadEvents();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: const Text('Apply Filters'),
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        );
-      },
     );
   }
 
@@ -415,6 +300,12 @@ class _EventsScreenState extends State<EventsScreen>
         context,
         message: 'Please log in to create events',
       );
+      
+      // Navigate to login screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => LoginScreen()),
+      );
       return;
     }
 
@@ -429,6 +320,12 @@ class _EventsScreenState extends State<EventsScreen>
     }
   }
 
+  void _onDaySelected(DateTime selectedDay) {
+    setState(() {
+      _selectedDate = selectedDay;
+    });
+  }
+
   Future<void> _refreshEvents() async {
     await _loadEvents();
   }
@@ -441,7 +338,7 @@ class _EventsScreenState extends State<EventsScreen>
     return Scaffold(
       appBar: AppBar(
         title: _searchQuery.isEmpty
-            ? const Text('Events')
+            ? const Text('All events details')
             : TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
@@ -452,8 +349,8 @@ class _EventsScreenState extends State<EventsScreen>
                     onPressed: _clearSearch,
                   ),
                 ),
-                style: const TextStyle(color: Colors.white),
-                cursorColor: Colors.white,
+                style: const TextStyle(color: Color.fromARGB(255, 1, 8, 44)),
+                cursorColor: const Color.fromARGB(255, 3, 39, 72),
                 onSubmitted: _handleSearch,
               ),
         actions: [
@@ -483,9 +380,9 @@ class _EventsScreenState extends State<EventsScreen>
                   Tab(text: 'Calendar'),
                   Tab(text: 'My Events'),
                 ],
-                indicatorColor: Colors.white,
-                labelColor: Colors.white,
-                unselectedLabelColor: Colors.white70,
+                indicatorColor: const Color.fromARGB(255, 4, 164, 30),
+                labelColor: const Color.fromARGB(255, 1, 3, 90),
+                unselectedLabelColor: const Color.fromARGB(255, 1, 3, 90),
               )
             : null,
       ),
@@ -499,7 +396,7 @@ class _EventsScreenState extends State<EventsScreen>
                     // All Events Tab
                     _buildAllEventsTab(),
 
-                    // Calendar Tab
+                    // Calendar Tab - Now implemented!
                     _buildCalendarTab(),
 
                     // My Events Tab
@@ -509,6 +406,7 @@ class _EventsScreenState extends State<EventsScreen>
       floatingActionButton: isUserLoggedIn
           ? FloatingActionButton(
               onPressed: _navigateToCreateEvent,
+              backgroundColor: AppColors.primary,
               child: const Icon(Icons.add),
             )
           : null,
@@ -572,9 +470,12 @@ class _EventsScreenState extends State<EventsScreen>
   }
 
   Widget _buildAllEventsTab() {
+    // Use a simpler approach to avoid infinite loading issues
     return RefreshIndicator(
       onRefresh: _refreshEvents,
-      child: _allEvents.isEmpty
+      child: _isLoading 
+        ? const Center(child: CircularProgressIndicator())
+        : _allEvents.isEmpty
           ? ListView(
               children: [
                 SizedBox(
@@ -622,6 +523,8 @@ class _EventsScreenState extends State<EventsScreen>
                 return EventCard(
                   event: _allEvents[index],
                   onAttend: () => _navigateToEventDetail(_allEvents[index]),
+                  showDeleteButton: _allEvents[index].isPast,
+                  onDelete: () => _deleteEvent(_allEvents[index]),
                 );
               },
             ),
@@ -629,30 +532,57 @@ class _EventsScreenState extends State<EventsScreen>
   }
 
   Widget _buildCalendarTab() {
-    // For now, display a placeholder message about calendar view
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.calendar_month,
-            size: 64,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Calendar View',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+    // Check if the events have been loaded
+    if (_allEvents.isEmpty) {
+      // If no events, show a message and trigger a load
+      _loadEvents();
+      
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.event_note,
+              size: 64,
+              color: Colors.grey[400],
             ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Calendar implementation coming soon',
-            style: TextStyle(color: Colors.grey),
-          ),
-        ],
+            const SizedBox(height: 16),
+            const Text(
+              'No events found in the calendar',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _refreshEvents,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Refresh Events'),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // Log events for debugging
+    debugPrint('Building calendar with ${_allEvents.length} events');
+    for (var event in _allEvents) {
+      debugPrint('Event: ${event.title} on ${event.date}');
+    }
+    
+    // Implement calendar view with EventCalendarView widget
+    return RefreshIndicator(
+      onRefresh: _refreshEvents,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        child: EventCalendarView(
+          events: _allEvents,
+          onDaySelected: _onDaySelected,
+        ),
       ),
     );
   }
@@ -683,7 +613,13 @@ class _EventsScreenState extends State<EventsScreen>
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () {
-                // Navigate to login screen
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => LoginScreen()),
+                ).then((_) {
+                  // Refresh after login
+                  _loadEvents();
+                });
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
@@ -696,65 +632,60 @@ class _EventsScreenState extends State<EventsScreen>
       );
     }
 
-    // For logged in users, load their events
-    return FutureBuilder<List<Event>>(
-      future: DatabaseService().getEventsUserIsAttending(currentUser.id),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (snapshot.hasError) {
-          return Center(
-            child: Text('Error: ${snapshot.error}'),
-          );
-        }
-
-        final userEvents = snapshot.data ?? [];
-
-        if (userEvents.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+    // Use simple approach to avoid infinite loading
+    return RefreshIndicator(
+      onRefresh: _refreshEvents,
+      child: _isLoading 
+        ? const Center(child: CircularProgressIndicator())
+        : _myEvents.isEmpty
+          ? ListView(
               children: [
-                Icon(
-                  Icons.event_busy,
-                  size: 64,
-                  color: Colors.grey[400],
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'You haven\'t joined any events yet',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey,
+                SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.8,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.event_busy,
+                          size: 64,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'You haven\'t joined any events yet',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton(
+                          onPressed: () => _tabController.animateTo(0),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Find Events'),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: () => _tabController.animateTo(0),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Find Events'),
                 ),
               ],
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _myEvents.length,
+              itemBuilder: (context, index) {
+                return EventCard(
+                  event: _myEvents[index],
+                  onAttend: () => _navigateToEventDetail(_myEvents[index]),
+                  showDeleteButton: _myEvents[index].isPast,
+                  onDelete: () => _deleteEvent(_myEvents[index]),
+                );
+              },
             ),
-          );
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: userEvents.length,
-          itemBuilder: (context, index) {
-            return EventCard(
-              event: userEvents[index],
-              onAttend: () => _navigateToEventDetail(userEvents[index]),
-            );
-          },
-        );
-      },
     );
   }
 

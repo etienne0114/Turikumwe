@@ -1,4 +1,4 @@
-// lib/screens/groups/group_home_screen.dart - FIXED VERSION
+// lib/screens/groups/group_home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:turikumwe/constants/app_colors.dart';
@@ -10,11 +10,12 @@ import 'package:turikumwe/screens/groups/group_chat_screen.dart';
 import 'package:turikumwe/screens/groups/group_detail_screen.dart';
 import 'package:turikumwe/screens/groups/group_members_screen.dart';
 import 'package:turikumwe/screens/groups/group_settings_screen.dart';
+import 'package:turikumwe/screens/post_comments_screen.dart';
 import 'package:turikumwe/services/auth_service.dart';
 import 'package:turikumwe/services/database_service.dart';
 import 'package:turikumwe/utils/dialog_utils.dart';
-// Import the GroupPostCard widget
-import 'package:turikumwe/widgets/group_post_card.dart';
+// Import the improved GroupPostCardHome widget
+import 'package:turikumwe/widgets/group_post_card_home.dart';
 
 class GroupHomeScreen extends StatefulWidget {
   final Group group;
@@ -32,6 +33,7 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
   bool _isAdmin = false;
   List<Post> _groupPosts = [];
   int _currentIndex = 0;
+  bool _refreshingPosts = false;
 
   @override
   void initState() {
@@ -80,21 +82,51 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
         setState(() => _group = updatedGroup);
       }
 
-      // Load group posts
-      final posts = await databaseService.getPosts(groupId: _group.id);
+      await _loadGroupPosts();
 
-      if (mounted) {
-        setState(() {
-          _groupPosts = posts;
-          _isLoading = false;
-        });
-      }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
         DialogUtils.showErrorSnackBar(
           context,
           message: 'Failed to load group data: ${e.toString()}',
+        );
+      }
+    }
+  }
+
+  Future<void> _loadGroupPosts() async {
+    if (!mounted) return;
+
+    setState(() => _refreshingPosts = true);
+
+    try {
+      final databaseService = Provider.of<DatabaseService>(context, listen: false);
+      
+      // Load group posts
+      final posts = await databaseService.getPosts(groupId: _group.id);
+
+      // Sort posts from newest to oldest
+      posts.sort((a, b) => 
+        DateTime.parse(b.createdAt).compareTo(DateTime.parse(a.createdAt))
+      );
+
+      if (mounted) {
+        setState(() {
+          _groupPosts = posts;
+          _isLoading = false;
+          _refreshingPosts = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _refreshingPosts = false;
+        });
+        DialogUtils.showErrorSnackBar(
+          context,
+          message: 'Failed to load posts: ${e.toString()}',
         );
       }
     }
@@ -198,7 +230,21 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
     // Implement share functionality
     DialogUtils.showSnackBar(context,
         message: 'Share functionality coming soon');
-        
+  }
+
+  void _showComments(Post post) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PostCommentsScreen(
+          post: post,
+          onCommentAdded: () {
+            // Refresh posts when comments are added
+            _loadGroupPosts();
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -304,12 +350,15 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
   Widget _buildHomeView() {
     final currentUser = Provider.of<AuthService>(context).currentUser;
 
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(child: _buildGroupHeader()),
-        SliverToBoxAdapter(child: _buildCreatePostSection(currentUser)),
-        _buildPostsSection(),
-      ],
+    return RefreshIndicator(
+      onRefresh: _loadGroupPosts,
+      child: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(child: _buildGroupHeader()),
+          SliverToBoxAdapter(child: _buildCreatePostSection(currentUser)),
+          _buildPostsSection(),
+        ],
+      ),
     );
   }
 
@@ -363,7 +412,7 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
       width: 80,
       height: 80,
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.1),
+        color: AppColors.primary.withAlpha(25),
         borderRadius: BorderRadius.circular(10),
         image: _group.image != null
             ? DecorationImage(
@@ -404,7 +453,7 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
+                  color: AppColors.primary.withAlpha(25),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
@@ -420,8 +469,8 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: _group.isPublic
-                      ? Colors.green.withOpacity(0.1)
-                      : Colors.orange.withOpacity(0.1),
+                      ? Colors.green.withAlpha(25)
+                      : Colors.orange.withAlpha(25),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
@@ -505,16 +554,21 @@ class _GroupHomeScreenState extends State<GroupHomeScreen> {
   }
 
   Widget _buildPostsSection() {
+    if (_refreshingPosts && _groupPosts.isEmpty) {
+      return const SliverFillRemaining(
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    
     return _groupPosts.isEmpty
         ? SliverFillRemaining(child: _buildEmptyPosts())
         : SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) => Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: GroupPostCard(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+                child: GroupPostCardHome(
                   post: _groupPosts[index],
-                  isGroupMember: _isMember,
-                  onPostUpdated: _loadGroupData,
+                  onPostUpdated: _loadGroupPosts,
                 ),
               ),
               childCount: _groupPosts.length,

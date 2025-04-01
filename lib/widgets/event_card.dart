@@ -13,6 +13,8 @@ class EventCard extends StatelessWidget {
   final bool isHorizontal;
   final VoidCallback? onAttend;
   final bool showAttendButton;
+  final bool showDeleteButton;
+  final VoidCallback? onDelete;
 
   const EventCard({
     Key? key,
@@ -20,6 +22,8 @@ class EventCard extends StatelessWidget {
     this.isHorizontal = false,
     this.onAttend,
     this.showAttendButton = true,
+    this.showDeleteButton = false,
+    this.onDelete,
   }) : super(key: key);
 
   Future<void> _handleAttend(BuildContext context) async {
@@ -76,7 +80,7 @@ class EventCard extends StatelessWidget {
   Widget _buildImageContent() {
     if (event.image == null || event.image!.isEmpty) {
       return Container(
-        color: AppColors.primary.withOpacity(0.1),
+        color: Colors.grey.withAlpha(40),
         child: const Center(
           child: Icon(
             Icons.event,
@@ -101,7 +105,7 @@ class EventCard extends StatelessWidget {
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
                   return Container(
-                    color: AppColors.primary.withOpacity(0.1),
+                    color: Colors.grey.withAlpha(40),
                     child: const Center(
                       child: Icon(
                         Icons.image_not_supported,
@@ -124,7 +128,7 @@ class EventCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
+                        color: Colors.black.withAlpha(25),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),
@@ -154,7 +158,7 @@ class EventCard extends StatelessWidget {
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) {
               return Container(
-                color: AppColors.primary.withOpacity(0.1),
+                color: Colors.grey.withAlpha(40),
                 child: const Center(
                   child: Icon(
                     Icons.broken_image,
@@ -175,7 +179,7 @@ class EventCard extends StatelessWidget {
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) {
               return Container(
-                color: AppColors.primary.withOpacity(0.1),
+                color: Colors.grey.withAlpha(40),
                 child: const Center(
                   child: Icon(
                     Icons.broken_image,
@@ -191,7 +195,7 @@ class EventCard extends StatelessWidget {
     } catch (e) {
       // Fallback for any exceptions
       return Container(
-        color: AppColors.primary.withOpacity(0.1),
+        color: Colors.grey.withAlpha(40),
         child: const Center(
           child: Icon(
             Icons.broken_image,
@@ -241,9 +245,9 @@ class EventCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: badgeColor.withOpacity(0.1),
+        color: badgeColor.withAlpha(25),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: badgeColor.withOpacity(0.3)),
+        border: Border.all(color: badgeColor.withAlpha(75)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -324,12 +328,12 @@ class EventCard extends StatelessWidget {
                 if (isPastEvent)
                   Positioned.fill(
                     child: Container(
-                      color: Colors.black.withOpacity(0.4),
+                      color: Colors.black.withAlpha(102),
                       alignment: Alignment.center,
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.6),
+                          color: Colors.black.withAlpha(153),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: const Text(
@@ -362,7 +366,7 @@ class EventCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
+                            color: Colors.black.withAlpha(25),
                             blurRadius: 4,
                             offset: const Offset(0, 2),
                           ),
@@ -437,7 +441,7 @@ class EventCard extends StatelessWidget {
                   ),
                   
                   // Action row
-                  if (showAttendButton) ...[
+                  if (showAttendButton || showDeleteButton) ...[
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -461,15 +465,34 @@ class EventCard extends StatelessWidget {
                           ),
                         ],
                         
-                        // Attend button
-                        TextButton(
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            visualDensity: VisualDensity.compact,
-                            foregroundColor: isPastEvent ? Colors.grey : AppColors.primary,
-                          ),
-                          onPressed: isPastEvent ? null : () => _handleAttend(context),
-                          child: Text(isPastEvent ? 'Event Ended' : 'Attend'),
+                        // Buttons row
+                        Row(
+                          children: [
+                            // Delete button (only for past events when showDeleteButton is true)
+                            if (showDeleteButton && isPastEvent && onDelete != null) 
+                              TextButton.icon(
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  visualDensity: VisualDensity.compact,
+                                  foregroundColor: Colors.red,
+                                ),
+                                onPressed: onDelete,
+                                icon: const Icon(Icons.delete, size: 16),
+                                label: const Text('Delete'),
+                              ),
+                                
+                            // Attend button
+                            if (showAttendButton)
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  visualDensity: VisualDensity.compact,
+                                  foregroundColor: isPastEvent ? Colors.grey : AppColors.primary,
+                                ),
+                                onPressed: isPastEvent ? null : () => _handleAttend(context),
+                                child: Text(isPastEvent ? 'Event Ended' : 'Attend'),
+                              ),
+                          ],
                         ),
                       ],
                     ),
@@ -511,12 +534,12 @@ class EventCard extends StatelessWidget {
                   if (isPastEvent)
                     Positioned.fill(
                       child: Container(
-                        color: Colors.black.withOpacity(0.4),
+                        color: Colors.black.withAlpha(102),
                         alignment: Alignment.center,
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.6),
+                            color: Colors.black.withAlpha(153),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: const Text(
@@ -550,7 +573,7 @@ class EventCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
+                              color: Colors.black.withAlpha(25),
                               blurRadius: 4,
                               offset: const Offset(0, 2),
                             ),
@@ -625,7 +648,7 @@ class EventCard extends StatelessWidget {
                     ),
                     
                     // Action row
-                    if (showAttendButton) ...[
+                    if (showAttendButton || showDeleteButton) ...[
                       const SizedBox(height: 8),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -649,19 +672,35 @@ class EventCard extends StatelessWidget {
                             ),
                           ],
                           
-                          // Attend button
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 8),
-                              visualDensity: VisualDensity.compact,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              foregroundColor: isPastEvent ? Colors.grey : AppColors.primary,
-                            ),
-                            onPressed: isPastEvent ? null : () => _handleAttend(context),
-                            child: Text(
-                              isPastEvent ? 'Ended' : 'Attend', 
-                              style: const TextStyle(fontSize: 12)
-                            ),
+                          // Buttons row
+                          Row(
+                            children: [
+                              // Delete button (only for past events when showDeleteButton is true)
+                              if (showDeleteButton && isPastEvent && onDelete != null) 
+                                IconButton(
+                                  iconSize: 18,
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                  onPressed: onDelete,
+                                ),
+                                
+                              // Attend button
+                              if (showAttendButton)
+                                TextButton(
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    visualDensity: VisualDensity.compact,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    foregroundColor: isPastEvent ? Colors.grey : AppColors.primary,
+                                  ),
+                                  onPressed: isPastEvent ? null : () => _handleAttend(context),
+                                  child: Text(
+                                    isPastEvent ? 'Ended' : 'Attend', 
+                                    style: const TextStyle(fontSize: 12)
+                                  ),
+                                ),
+                            ],
                           ),
                         ],
                       ),

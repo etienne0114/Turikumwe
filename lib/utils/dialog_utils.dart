@@ -38,7 +38,9 @@ class DialogUtils {
     required String title,
     required String message,
     String confirmText = 'Yes',
-    String cancelText = 'No', required bool isDangerous,
+    String cancelText = 'No', 
+    bool isDangerous = false,
+    bool isDestructive = false,
   }) async {
     final result = await showDialog<bool>(
       context: context,
@@ -57,6 +59,11 @@ class DialogUtils {
               },
             ),
             TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: isDangerous || isDestructive 
+                    ? Colors.red 
+                    : AppColors.primary,
+              ),
               child: Text(confirmText),
               onPressed: () {
                 Navigator.of(context).pop(true);
@@ -187,6 +194,27 @@ class DialogUtils {
         duration: duration,
         backgroundColor: Colors.red,
       ),
+    );
+  }
+  
+  /// Show delete confirmation dialog
+  static Future<bool> showDeleteConfirmationDialog(
+    BuildContext context, {
+    required String itemType,
+    String? itemName,
+  }) async {
+    final String title = 'Delete $itemType';
+    final String message = itemName != null 
+        ? 'Are you sure you want to delete "$itemName"?'
+        : 'Are you sure you want to delete this $itemType?';
+    
+    return showConfirmationDialog(
+      context,
+      title: title,
+      message: message,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      isDangerous: true,
     );
   }
 }
