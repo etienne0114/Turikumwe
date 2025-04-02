@@ -5,6 +5,7 @@ import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/constants/app_strings.dart';
 import 'package:turikumwe/screens/create_event_screen.dart';
 import 'package:turikumwe/screens/create_post_screen.dart';
+import 'package:turikumwe/screens/create_story_screen.dart';
 import 'package:turikumwe/screens/events_screen.dart';
 import 'package:turikumwe/screens/groups/create_group_screen.dart';
 import 'package:turikumwe/screens/groups/groups_list_screen.dart';
@@ -301,7 +302,7 @@ class _MainScreenState extends State<MainScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return SafeArea(
+        return SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 20),
             child: Column(
@@ -396,6 +397,33 @@ class _MainScreenState extends State<MainScreen> {
                     );
                   },
                 ),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Colors.pink,
+                    child: Icon(Icons.auto_stories_outlined, color: Colors.white),
+                  ),
+                  title: const Text('Create Story'),
+                  subtitle: const Text('Sharing Story to a community'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CreateStoryScreen(),
+                      ),
+                    ).then((value) {
+                      
+                      if (value == true) {
+                        setState(() {
+                          _currentIndex = 3; 
+                        });
+                      }
+                    });
+                  },
+                  
+                )
+              
               ],
             ),
           ),

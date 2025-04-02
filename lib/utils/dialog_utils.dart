@@ -38,7 +38,7 @@ class DialogUtils {
     required String title,
     required String message,
     String confirmText = 'Yes',
-    String cancelText = 'No', 
+    String cancelText = 'No',
     bool isDangerous = false,
     bool isDestructive = false,
   }) async {
@@ -60,8 +60,8 @@ class DialogUtils {
             ),
             TextButton(
               style: TextButton.styleFrom(
-                foregroundColor: isDangerous || isDestructive 
-                    ? Colors.red 
+                foregroundColor: isDangerous || isDestructive
+                    ? Colors.red
                     : AppColors.primary,
               ),
               child: Text(confirmText),
@@ -73,7 +73,7 @@ class DialogUtils {
         );
       },
     );
-    
+
     return result ?? false;
   }
 
@@ -196,7 +196,20 @@ class DialogUtils {
       ),
     );
   }
-  
+
+  static void showInfoSnackBar(
+    BuildContext context, {
+    required String message,
+  }) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.blue, // Info color
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   /// Show delete confirmation dialog
   static Future<bool> showDeleteConfirmationDialog(
     BuildContext context, {
@@ -204,10 +217,10 @@ class DialogUtils {
     String? itemName,
   }) async {
     final String title = 'Delete $itemType';
-    final String message = itemName != null 
+    final String message = itemName != null
         ? 'Are you sure you want to delete "$itemName"?'
         : 'Are you sure you want to delete this $itemType?';
-    
+
     return showConfirmationDialog(
       context,
       title: title,

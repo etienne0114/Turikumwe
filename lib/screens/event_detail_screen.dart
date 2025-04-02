@@ -8,6 +8,7 @@ import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/models/event.dart';
 import 'package:turikumwe/models/user.dart';
 import 'package:turikumwe/screens/create_event_screen.dart';
+import 'package:turikumwe/screens/event_registration_screen.dart';
 import 'package:turikumwe/services/auth_service.dart';
 import 'package:turikumwe/services/database_service.dart';
 import 'package:turikumwe/utils/dialog_utils.dart';
@@ -39,11 +40,20 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     _checkAttendanceStatus();
     _loadAttendees();
     _loadOrganizer();
-    
+
     // Track event view for analytics
     _trackEventView();
+
+    if (_event.isPrivate == true) {
+      _checkRegistrationStatus();
+    }
+
+// Check payment status for paid events
+    if (_event.price != null && _event.price! > 0) {
+      _checkPaymentStatus();
+    }
   }
-  
+
   Future<void> _trackEventView() async {
     try {
       // Just log for now, no actual DB operation
@@ -53,21 +63,87 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     }
   }
 
+  Future<void> _checkRegistrationStatus() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser;
+
+    if (currentUser != null) {
+      final registration = await DatabaseService().getEventRegistration(
+        _event.id,
+        currentUser.id,
+      );
+
+      if (mounted && registration != null) {
+        setState(() {
+        });
+      }
+    }
+  }
+
+  Future<void> _checkPaymentStatus() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser;
+
+    if (currentUser != null) {
+
+      if (mounted) {
+        setState(() {
+        });
+      }
+    }
+  }
+
+  void _navigateToRegistration() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EventRegistrationScreen(
+          event: _event,
+          onRegistrationComplete: () {
+            _refreshEventData();
+            _checkRegistrationStatus();
+            _checkPaymentStatus();
+          },
+        ),
+      ),
+    );
+
+    if (result == true) {
+      _refreshEventData();
+    }
+  }
+
   Future<void> _checkAttendanceStatus() async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentUser = authService.currentUser;
-    
+
     if (currentUser != null) {
-      // Check if current user is in the attendees list
-      if (_event.attendeesIds != null && _event.attendeesIds!.isNotEmpty) {
-        final attendeeIds = _event.attendeesIds!.split(',')
-            .where((id) => id.trim().isNotEmpty)
-            .map((id) => int.parse(id.trim()))
-            .toList();
-        
-        setState(() {
-          _isAttending = attendeeIds.contains(currentUser.id);
-        });
+      try {
+        // Check if current user is in the attendees list
+        if (_event.attendeesIds != null && _event.attendeesIds!.isNotEmpty) {
+          final attendeeIds = _event.attendeesIds!
+              .split(',')
+              .where((id) => id.trim().isNotEmpty)
+              .map((id) => int.parse(id.trim()))
+              .toList();
+
+          final isAttending = attendeeIds.contains(currentUser.id);
+
+          // Also check registration status separately
+
+
+          setState(() {
+            _isAttending = isAttending;
+          });
+        } else {
+          // If no attendees yet, check if registered
+
+          setState(() {
+            _isAttending = false;
+          });
+        }
+      } catch (e) {
+        debugPrint('Error checking attendance status: $e');
       }
     }
   }
@@ -85,21 +161,22 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         });
         return;
       }
-      
+
       // Get list of attendee IDs
       final attendeeIdsStr = _event.attendeesIds!;
-      final attendeeIds = attendeeIdsStr.split(',')
+      final attendeeIds = attendeeIdsStr
+          .split(',')
           .where((id) => id.trim().isNotEmpty)
           .map((id) => int.parse(id.trim()))
           .toList();
-          
+
       if (attendeeIds.isEmpty) {
         setState(() {
           _isLoadingAttendees = false;
         });
         return;
       }
-      
+
       // Get each user separately (as a workaround for getUsersByIds)
       List<User> attendees = [];
       for (var id in attendeeIds) {
@@ -108,7 +185,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           attendees.add(user);
         }
       }
-      
+
       if (mounted) {
         setState(() {
           _attendees = attendees;
@@ -124,7 +201,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       }
     }
   }
-  
+
   Future<void> _loadOrganizer() async {
     try {
       final organizer = await DatabaseService().getUserById(_event.organizerId);
@@ -141,7 +218,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   Future<void> _toggleAttendance() async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentUser = authService.currentUser;
-    
+
     if (currentUser == null) {
       DialogUtils.showErrorSnackBar(
         context,
@@ -150,77 +227,16 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       return;
     }
 
+    // If event is private or paid, show registration form instead of directly registering
+    if (_event.isPrivate == true ||
+        (_event.price != null && _event.price! > 0)) {
+      _navigateToRegistration();
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
-
-    try {
-      // Get current attendees list
-      List<String> attendeeIds = [];
-      if (_event.attendeesIds != null && _event.attendeesIds!.isNotEmpty) {
-        attendeeIds = _event.attendeesIds!
-            .split(',')
-            .where((id) => id.trim().isNotEmpty)
-            .toList();
-      }
-      
-      final currentUserId = currentUser.id.toString();
-      
-      if (_isAttending) {
-        // Remove user from attendees
-        attendeeIds.remove(currentUserId);
-      } else {
-        // Add user to attendees
-        if (!attendeeIds.contains(currentUserId)) {
-          attendeeIds.add(currentUserId);
-        }
-      }
-      
-      // Update event with new attendees list
-      final updatedEvent = {
-        'id': _event.id,
-        'attendeesIds': attendeeIds.join(','),
-        'updatedAt': DateTime.now().toIso8601String(),
-      };
-      
-      final result = await DatabaseService().updateEvent(updatedEvent);
-      
-      if (result > 0) {
-        // Reload event data
-        final freshEvent = await DatabaseService().getEventById(_event.id);
-        
-        if (freshEvent != null && mounted) {
-          setState(() {
-            _event = freshEvent;
-            _isAttending = !_isAttending;
-            _isLoading = false;
-          });
-          
-          // Reload attendees
-          _loadAttendees();
-          
-          DialogUtils.showSuccessSnackBar(
-            context,
-            message: _isAttending 
-                ? 'You are now registered for this event' 
-                : 'You have cancelled your registration',
-          );
-        }
-      } else {
-        throw Exception('Failed to update event attendance');
-      }
-    } catch (e) {
-      debugPrint('Error toggling attendance: $e');
-      if (mounted) {
-        DialogUtils.showErrorSnackBar(
-          context,
-          message: 'Failed to update registration. Please try again.',
-        );
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
   }
 
   Future<void> _shareEvent() async {
@@ -228,11 +244,11 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         'Date: ${DateFormat('EEEE, MMM d, y • h:mm a').format(_event.date)}\n'
         'Location: ${_event.location}, ${_event.district ?? ''}\n\n'
         'Join me at this event through the Turikumwe app!';
-    
+
     try {
       // Track share analytics
       debugPrint('Event shared: ${_event.id}');
-      
+
       await Share.share(shareText);
     } catch (e) {
       debugPrint('Error sharing event: $e');
@@ -246,9 +262,11 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   }
 
   Future<void> _openLocationMap() async {
-    final String query = Uri.encodeComponent('${_event.location}, ${_event.district ?? ''}, Rwanda');
-    final Uri uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
-    
+    final String query = Uri.encodeComponent(
+        '${_event.location}, ${_event.district ?? ''}, Rwanda');
+    final Uri uri =
+        Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
+
     try {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -264,7 +282,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       debugPrint('Error opening map: $e');
       if (mounted) {
         DialogUtils.showErrorSnackBar(
-          context, 
+          context,
           message: 'Failed to open map.',
         );
       }
@@ -302,19 +320,19 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   bool get _isOrganizerOrAdmin {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentUser = authService.currentUser;
-    
+
     if (currentUser == null) return false;
-    
+
     // Check if user is the organizer or an admin
-    return currentUser.id == _event.organizerId || 
-           (currentUser.isAdmin == true);
+    return currentUser.id == _event.organizerId ||
+        (currentUser.isAdmin == true);
   }
 
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
     final bool isLoggedIn = authService.currentUser != null;
-    
+
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: _refreshEventData,
@@ -341,7 +359,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                 background: _buildEventImage(),
               ),
             ),
-            
+
             // Event Content
             SliverToBoxAdapter(
               child: Column(
@@ -356,21 +374,25 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                         // Event Title
                         Text(
                           _event.title,
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
                         ),
                         const SizedBox(height: 16),
-                        
+
                         // Date & Time
                         _buildInfoRow(
                           icon: Icons.calendar_today,
                           title: 'Date & Time',
-                          content: DateFormat('EEEE, MMM d, y • h:mm a').format(_event.date),
+                          content: DateFormat('EEEE, MMM d, y • h:mm a')
+                              .format(_event.date),
                           primaryColor: AppColors.primary,
                         ),
                         const SizedBox(height: 12),
-                        
+
                         // Location with Map Button
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -401,23 +423,24 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    _event.district != null 
-                                      ? '${_event.location}, ${_event.district}'
-                                      : _event.location,
+                                    _event.district != null
+                                        ? '${_event.location}, ${_event.district}'
+                                        : _event.location,
                                     style: const TextStyle(fontSize: 16),
                                   ),
                                 ],
                               ),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.map, color: AppColors.primary),
+                              icon: const Icon(Icons.map,
+                                  color: AppColors.primary),
                               onPressed: _openLocationMap,
                               tooltip: 'Open in Map',
                             ),
                           ],
                         ),
                         const SizedBox(height: 12),
-                        
+
                         // Category
                         if (_event.category != null) ...[
                           _buildInfoRow(
@@ -428,21 +451,21 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                           ),
                           const SizedBox(height: 12),
                         ],
-                        
+
                         // Price Information (if paid event)
                         if (_event.price != null && _event.price! > 0) ...[
                           _buildInfoRow(
                             icon: Icons.money,
                             title: 'Entry Fee',
                             content: '${_event.price!.toStringAsFixed(0)} RWF',
-                            subContent: _event.paymentMethod != null 
-                                ? 'Payment via ${_event.paymentMethod}' 
+                            subContent: _event.paymentMethod != null
+                                ? 'Payment via ${_event.paymentMethod}'
                                 : null,
                             primaryColor: Colors.green,
                           ),
                           const SizedBox(height: 12),
                         ],
-                        
+
                         // Organizer
                         _buildInfoRow(
                           icon: Icons.person,
@@ -451,18 +474,18 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                           primaryColor: Colors.deepPurple,
                         ),
                         const SizedBox(height: 12),
-                        
+
                         // Attendees count
                         _buildInfoRow(
                           icon: Icons.people,
                           title: 'Attendees',
-                          content: _isLoadingAttendees 
-                            ? 'Loading...' 
-                            : '${_attendees.length} registered',
+                          content: _isLoadingAttendees
+                              ? 'Loading...'
+                              : '${_attendees.length} registered',
                           primaryColor: Colors.blue,
                         ),
                         const SizedBox(height: 12),
-                        
+
                         // Visibility Badge
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -483,7 +506,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                     ? Icons.lock
                                     : Icons.public,
                                 size: 16,
-                                color: _event.isPrivate == true 
+                                color: _event.isPrivate == true
                                     ? Colors.amber[800]
                                     : Colors.green[800],
                               ),
@@ -493,7 +516,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                     ? 'Private Event'
                                     : 'Public Event',
                                 style: TextStyle(
-                                  color: _event.isPrivate == true 
+                                  color: _event.isPrivate == true
                                       ? Colors.amber[800]
                                       : Colors.green[800],
                                   fontWeight: FontWeight.bold,
@@ -502,9 +525,9 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                             ],
                           ),
                         ),
-                        
+
                         const Divider(height: 32),
-                        
+
                         // Description
                         const Text(
                           'About this event',
@@ -521,9 +544,9 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                             height: 1.5,
                           ),
                         ),
-                        
+
                         const Divider(height: 32),
-                        
+
                         // Attendees Section
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -542,7 +565,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        
+
                         // Attendees List (Simple implementation)
                         if (_isLoadingAttendees)
                           const Center(
@@ -550,7 +573,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                           )
                         else if (_attendees.isEmpty)
                           const Center(
-                            child: Text('No attendees yet. Be the first to join!'),
+                            child:
+                                Text('No attendees yet. Be the first to join!'),
                           )
                         else
                           Wrap(
@@ -561,8 +585,10 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                 children: [
                                   CircleAvatar(
                                     radius: 24,
-                                    backgroundImage: attendee.profilePicture != null 
-                                        ? NetworkImage(attendee.profilePicture!) as ImageProvider
+                                    backgroundImage: attendee.profilePicture !=
+                                            null
+                                        ? NetworkImage(attendee.profilePicture!)
+                                            as ImageProvider
                                         : null,
                                     child: attendee.profilePicture == null
                                         ? Text(
@@ -576,7 +602,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    attendee.name.split(' ')[0], // Just first name
+                                    attendee.name
+                                        .split(' ')[0], // Just first name
                                     style: const TextStyle(fontSize: 12),
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -584,7 +611,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                               );
                             }).toList(),
                           ),
-                        
+
                         const SizedBox(height: 80), // Bottom padding for FAB
                       ],
                     ),
@@ -595,7 +622,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           ],
         ),
       ),
-      
+
       // Attendance Button
       floatingActionButton: !_isEventPast && isLoggedIn
           ? SizedBox(
@@ -605,13 +632,16 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                 icon: Icon(_isAttending ? Icons.close : Icons.check_circle),
                 label: Text(
                   _isAttending
-                    ? 'Cancel Registration'
-                    : _event.price != null && _event.price! > 0
-                        ? 'Register Now • ${_event.price!.toStringAsFixed(0)} RWF'
-                        : 'Register Now • Free',
+                      ? 'Cancel Registration'
+                      : _event.isPrivate == true
+                          ? 'Request to Join Event'
+                          : _event.price != null && _event.price! > 0
+                              ? 'Register Now • ${_event.price!.toStringAsFixed(0)} RWF'
+                              : 'Register Now • Free',
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _isAttending ? Colors.red : AppColors.primary,
+                  backgroundColor:
+                      _isAttending ? Colors.red : AppColors.primary,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
@@ -655,7 +685,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         ),
       );
     }
-    
+
     try {
       if (_event.image!.startsWith('http')) {
         // Network image
@@ -676,12 +706,13 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
             },
           ),
         );
-      } else if (_event.image!.startsWith('file://') || _event.image!.startsWith('/')) {
+      } else if (_event.image!.startsWith('file://') ||
+          _event.image!.startsWith('/')) {
         // Local file image
-        final imagePath = _event.image!.startsWith('file://') 
-            ? _event.image!.replaceFirst('file://', '') 
+        final imagePath = _event.image!.startsWith('file://')
+            ? _event.image!.replaceFirst('file://', '')
             : _event.image!;
-        
+
         return Hero(
           tag: 'event-image-${_event.id}',
           child: Image.file(
@@ -788,5 +819,10 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         ),
       ],
     );
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 }

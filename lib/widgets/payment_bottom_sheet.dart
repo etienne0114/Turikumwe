@@ -1,19 +1,27 @@
 // lib/widgets/payment_bottom_sheet.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:turikumwe/constants/app_colors.dart';
 import 'package:turikumwe/models/event.dart';
+import 'package:turikumwe/screens/events_screen.dart';
+import 'package:turikumwe/services/auth_service.dart';
+import 'package:turikumwe/services/database_service.dart';
 import 'package:turikumwe/utils/dialog_utils.dart';
 import 'package:turikumwe/widgets/custom_button.dart';
+import 'package:flutter/services.dart';
+import 'package:turikumwe/widgets/custom_text_field.dart';
 
 class PaymentBottomSheet extends StatefulWidget {
   final Event event;
   final VoidCallback onPaymentComplete;
+  final String? questionnaireResponses; // New parameter
 
   const PaymentBottomSheet({
     Key? key,
     required this.event,
     required this.onPaymentComplete,
+    this.questionnaireResponses,
   }) : super(key: key);
 
   @override
@@ -48,11 +56,40 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
     });
 
     try {
-      // Simulate payment processing
+     
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final currentUser = authService.currentUser;
+
+      if (currentUser == null) {
+        throw Exception('User not logged in');
+      }
+
       await Future.delayed(const Duration(seconds: 2));
 
-      // In a real app, you would integrate with payment APIs here
-      // For now, just consider the payment successful
+      final databaseService = DatabaseService();
+      await databaseService.recordEventPayment({
+        'eventId': widget.event.id,
+        'userId': currentUser.id,
+        'paymentStatus': 'completed',
+        'paymentReference': 'REF${DateTime.now().millisecondsSinceEpoch}',
+        'paymentAmount': widget.event.price,
+        'paymentMethod': _selectedPaymentMethod,
+        'paymentDate': DateTime.now().toIso8601String(),
+      });
+
+       await databaseService.addUserToEventAttendees(
+      currentUser.id,
+      widget.event.id,
+    );
+    
+
+      if (widget.questionnaireResponses != null) {
+        await databaseService.saveQuestionnaireResponses(
+          widget.event.id,
+          currentUser.id,
+          widget.questionnaireResponses!,
+        );
+      }
 
       setState(() {
         _isLoading = false;
@@ -63,16 +100,18 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
           context,
           message: 'Payment successful! You are now registered for the event.',
         );
-        
+         Navigator.pop(context);
+
         widget.onPaymentComplete();
+        await _navigateToMyEvents(context);
       }
     } catch (e) {
       debugPrint('Error processing payment: $e');
-      
+
       setState(() {
         _isLoading = false;
       });
-      
+
       if (mounted) {
         DialogUtils.showErrorSnackBar(
           context,
@@ -82,11 +121,22 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
     }
   }
 
+  Future<void> _navigateToMyEvents(BuildContext context) async {
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const EventsScreen(),
+      ),
+    );
+  }
+
+
+
   @override
   Widget build(BuildContext context) {
     // Safely access event.price with null check
     final price = widget.event.price ?? 0;
-    
+
     return Container(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -121,9 +171,9 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                     ),
                   ],
                 ),
-                
+
                 const Divider(),
-                
+
                 // Event details
                 ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -144,9 +194,9 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Payment method selector
                 const Text(
                   'Select Payment Method',
@@ -156,33 +206,33 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                
+
                 // Radio buttons for payment methods
                 _buildPaymentMethodSelector(
-                  'MTN Mobile Money', 
-                  'Pay with MTN Mobile Money', 
+                  'MTN Mobile Money',
+                  'Pay with MTN Mobile Money',
                   Icons.phone_android,
                 ),
                 _buildPaymentMethodSelector(
-                  'Airtel Money', 
-                  'Pay with Airtel Money', 
+                  'Airtel Money',
+                  'Pay with Airtel Money',
                   Icons.phone_android,
                 ),
                 _buildPaymentMethodSelector(
-                  'Credit Card', 
-                  'Pay with Credit/Debit Card', 
+                  'Credit Card',
+                  'Pay with Credit/Debit Card',
                   Icons.credit_card,
                 ),
                 _buildPaymentMethodSelector(
-                  'Bank Transfer', 
-                  'Pay via Bank Transfer', 
+                  'Bank Transfer',
+                  'Pay via Bank Transfer',
                   Icons.account_balance,
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Phone number field (for mobile money)
-                if (_selectedPaymentMethod == 'MTN Mobile Money' || 
+                if (_selectedPaymentMethod == 'MTN Mobile Money' ||
                     _selectedPaymentMethod == 'Airtel Money')
                   TextFormField(
                     controller: _phoneController,
@@ -198,7 +248,12 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                         },
                       ),
                     ),
-                    keyboardType: TextInputType.phone,
+                    keyboardType:
+                        TextInputType.phone, // This shows the numeric keyboard
+                    inputFormatters: [
+                      FilteringTextInputFormatter
+                          .digitsOnly, // This restricts input to digits only
+                    ],
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'Please enter your phone number';
@@ -209,7 +264,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                       return null;
                     },
                   ),
-                
+
                 // Card details (for credit card)
                 if (_selectedPaymentMethod == 'Credit Card')
                   Column(
@@ -231,7 +286,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                         },
                       ),
                       const SizedBox(height: 16),
-                      
+
                       // Expiry date and CVV
                       Row(
                         children: [
@@ -273,7 +328,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                       ),
                     ],
                   ),
-                
+
                 // Bank account details (for bank transfer)
                 if (_selectedPaymentMethod == 'Bank Transfer')
                   Container(
@@ -294,9 +349,12 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                         ),
                         const SizedBox(height: 8),
                         _buildBankDetail('Bank Name', 'Bank of Kigali'),
-                        _buildBankDetail('Account Name', 'Turikumwe Events Ltd'),
-                        _buildBankDetail('Account Number', '0000-1111-2222-3333'),
-                        _buildBankDetail('Reference', 'Event-${widget.event.id}'),
+                        _buildBankDetail(
+                            'Account Name', 'Turikumwe Events Ltd'),
+                        _buildBankDetail(
+                            'Account Number', '0000-1111-2222-3333'),
+                        _buildBankDetail(
+                            'Reference', 'Event-${widget.event.id}'),
                         const SizedBox(height: 8),
                         const Text(
                           'Please upload your payment receipt to complete registration',
@@ -316,9 +374,9 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                       ],
                     ),
                   ),
-                
+
                 const SizedBox(height: 24),
-                
+
                 // Payment button
                 SizedBox(
                   width: double.infinity,
@@ -337,9 +395,9 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Cancel button
                 SizedBox(
                   width: double.infinity,
@@ -349,6 +407,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                   ),
                 ),
               ],
+              
             ),
           ),
         ),
@@ -356,7 +415,8 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
     );
   }
 
-  Widget _buildPaymentMethodSelector(String value, String label, IconData icon) {
+  Widget _buildPaymentMethodSelector(
+      String value, String label, IconData icon) {
     return RadioListTile<String>(
       title: Text(label),
       secondary: Icon(icon),
@@ -373,7 +433,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
       },
     );
   }
-  
+
   Widget _buildBankDetail(String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
@@ -402,3 +462,54 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
     );
   }
 }
+class PhoneNumberField extends StatelessWidget {
+  final TextEditingController controller;
+  final String? labelText;
+  final String? hintText;
+  final bool isRequired;
+  final Function()? onContactPressed;
+
+  const PhoneNumberField({
+    Key? key,
+    required this.controller,
+    this.labelText = 'Phone Number',
+    this.hintText = '07XXXXXXXX',
+    this.isRequired = true,
+    this.onContactPressed,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: labelText,
+        hintText: hintText,
+        border: const OutlineInputBorder(),
+        prefixIcon: const Icon(Icons.phone),
+        suffixIcon: onContactPressed != null
+            ? IconButton(
+                icon: const Icon(Icons.contacts),
+                onPressed: onContactPressed,
+              )
+            : null,
+      ),
+      keyboardType: TextInputType.phone,
+      inputFormatters: [
+        FilteringTextInputFormatter.digitsOnly,
+      ],
+      validator: isRequired
+          ? (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter your phone number';
+              }
+              if (value.length < 10) {
+                return 'Please enter a valid phone number';
+              }
+              return null;
+            }
+          : null,
+    );
+  }
+}
+

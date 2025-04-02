@@ -1,12 +1,18 @@
 // lib/helpers/event_creator.dart
 
-import 'package:turikumwe/models/event.dart';
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 import 'package:turikumwe/services/database_service.dart';
 
+/// Helper class to handle event creation/editing logic including image processing
 class EventCreator {
   final DatabaseService _databaseService = DatabaseService();
-
-  // Create an event with proper error handling for the database schema
+  
+  /// Create a new event
   Future<int> createEvent({
     required String title,
     required String description,
@@ -17,36 +23,58 @@ class EventCreator {
     required int organizerId,
     String? district,
     String? category,
-    bool isPrivate = false,
+    bool? isPrivate,
     double? price,
     String? paymentMethod,
+    bool? hasQuestionnaire,
+    Map<String, dynamic>? questionnaireData,
   }) async {
-    // First, ensure the database schema is updated
-    await _databaseService.updateEventTableIfNeeded();
-
-    // Prepare the event data
-    final Map<String, dynamic> eventData = {
-      'title': title,
-      'description': description,
-      'date': date.toIso8601String(),
-      'location': location,
-      'image': image,
-      'groupId': groupId,
-      'organizerId': organizerId,
-      'district': district,
-      'category': category,
-      'isPrivate': isPrivate ? 1 : 0, // Convert boolean to SQLite integer
-      'price': price,
-      'paymentMethod': paymentMethod,
-      'createdAt': DateTime.now().toIso8601String(),
-      'updatedAt': DateTime.now().toIso8601String(),
-    };
-
-    // Use the safe insert method
-    return await _databaseService.safeInsertEvent(eventData);
+    try {
+      // Process image if any
+      String? processedImagePath;
+      if (image != null && image.isNotEmpty) {
+        if (image.startsWith('http')) {
+          processedImagePath = image; // Already a URL, no processing needed
+        } else {
+          processedImagePath = await _processLocalImage(image);
+        }
+      }
+      
+      // Convert questionnaireData to JSON string if provided
+      String? questionnaireDataJson;
+      if (questionnaireData != null) {
+        questionnaireDataJson = jsonEncode(questionnaireData);
+      }
+      
+      // Create the event data map
+      final event = {
+        'title': title,
+        'description': description,
+        'date': date.toIso8601String(),
+        'location': location,
+        'image': processedImagePath,
+        'groupId': groupId,
+        'organizerId': organizerId,
+        'district': district,
+        'category': category,
+        'createdAt': DateTime.now().toIso8601String(),
+        'updatedAt': DateTime.now().toIso8601String(),
+        'isPrivate': isPrivate == true ? 1 : 0,
+        'price': price,
+        'paymentMethod': paymentMethod,
+        'hasQuestionnaire': hasQuestionnaire == true ? 1 : 0,
+        'questionnaireData': questionnaireDataJson,
+      };
+      
+      // Insert into database
+      return await _databaseService.safeInsertEvent(event);
+    } catch (e) {
+      debugPrint('Error creating event: $e');
+      return 0;
+    }
   }
-
-  // Update an existing event
+  
+  /// Update an existing event
   Future<bool> updateEvent({
     required int id,
     String? title,
@@ -60,57 +88,83 @@ class EventCreator {
     bool? isPrivate,
     double? price,
     String? paymentMethod,
+    bool? hasQuestionnaire,
+    Map<String, dynamic>? questionnaireData,
   }) async {
-    // First, get the current event
-    final event = await _databaseService.getEventById(id);
-    if (event == null) {
+    try {
+      // Get existing event
+      final existingEvent = await _databaseService.getEventById(id);
+      if (existingEvent == null) {
+        return false;
+      }
+      
+      // Process image if changed
+      String? processedImagePath = existingEvent.image;
+      if (image != null && image != existingEvent.image) {
+        if (image.startsWith('http')) {
+          processedImagePath = image; // Already a URL, no processing needed
+        } else {
+          processedImagePath = await _processLocalImage(image);
+        }
+      }
+      
+      // Convert questionnaireData to JSON string if provided
+      String? questionnaireDataJson;
+      if (questionnaireData != null) {
+        questionnaireDataJson = jsonEncode(questionnaireData);
+      } else if (existingEvent.questionnaireData != null) {
+        // Keep existing questionnaire data
+        questionnaireDataJson = jsonEncode(existingEvent.questionnaireData);
+      }
+      
+      // Create the event data map with updates
+      final event = {
+        'id': id,
+        'title': title ?? existingEvent.title,
+        'description': description ?? existingEvent.description,
+        'date': date != null ? date.toIso8601String() : existingEvent.date.toIso8601String(),
+        'location': location ?? existingEvent.location,
+        'image': processedImagePath,
+        'groupId': groupId ?? existingEvent.groupId,
+        'district': district ?? existingEvent.district,
+        'category': category ?? existingEvent.category,
+        'updatedAt': DateTime.now().toIso8601String(),
+        'isPrivate': isPrivate == true ? 1 : (existingEvent.isPrivate == true ? 1 : 0),
+        'price': price ?? existingEvent.price,
+        'paymentMethod': paymentMethod ?? existingEvent.paymentMethod,
+        'hasQuestionnaire': hasQuestionnaire == true ? 1 : (existingEvent.hasQuestionnaire == true ? 1 : 0),
+        'questionnaireData': questionnaireDataJson,
+      };
+      
+      // Update in database
+      final result = await _databaseService.updateEvent(event);
+      return result > 0;
+    } catch (e) {
+      debugPrint('Error updating event: $e');
       return false;
     }
-
-    // Create updated event data
-    final Map<String, dynamic> eventData = {
-      'id': id,
-      'title': title ?? event.title,
-      'description': description ?? event.description,
-      'date': date != null ? date.toIso8601String() : event.date.toIso8601String(),
-      'location': location ?? event.location,
-      'image': image ?? event.image,
-      'groupId': groupId ?? event.groupId,
-      'organizerId': event.organizerId, // Cannot change organizer
-      'district': district ?? event.district,
-      'category': category ?? event.category,
-      'isPrivate': isPrivate != null ? (isPrivate ? 1 : 0) : (event.isPrivate ?? false ? 1 : 0),
-      'price': price ?? event.price,
-      'paymentMethod': paymentMethod ?? event.paymentMethod,
-      'updatedAt': DateTime.now().toIso8601String(),
-    };
-
-    // First ensure the schema is updated
-    await _databaseService.updateEventTableIfNeeded();
-
-    // Update the event
-    final result = await _databaseService.updateEvent(eventData);
-    return result > 0;
   }
-
-  // Toggle event visibility
-  Future<bool> toggleEventVisibility(int eventId) async {
-    final event = await _databaseService.getEventById(eventId);
-    if (event == null) {
-      return false;
+  
+  /// Process a local image file (copy to app documents directory)
+  Future<String> _processLocalImage(String imagePath) async {
+    try {
+      // Generate a unique filename
+      final uuid = const Uuid().v4();
+      final extension = path.extension(imagePath);
+      final filename = 'event_image_$uuid$extension';
+      
+      // Get app documents directory
+      final appDir = await getApplicationDocumentsDirectory();
+      final targetPath = path.join(appDir.path, filename);
+      
+      // Copy the file
+      final File sourceFile = File(imagePath);
+      await sourceFile.copy(targetPath);
+      
+      return targetPath;
+    } catch (e) {
+      debugPrint('Error processing image: $e');
+      return imagePath; // Return original path on error
     }
-
-    // Toggle the isPrivate value
-    final isCurrentlyPrivate = event.isPrivate ?? false;
-    
-    final Map<String, dynamic> eventData = {
-      'id': eventId,
-      'isPrivate': isCurrentlyPrivate ? 0 : 1,
-      'updatedAt': DateTime.now().toIso8601String(),
-    };
-
-    // Update the event
-    final result = await _databaseService.updateEvent(eventData);
-    return result > 0;
   }
 }

@@ -1,5 +1,8 @@
 // lib/services/database_service.dart
 
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:turikumwe/models/user.dart';
@@ -8,7 +11,7 @@ import 'package:turikumwe/models/group.dart';
 import 'package:turikumwe/models/event.dart';
 import 'package:turikumwe/models/story.dart';
 import 'package:turikumwe/models/message.dart';
-import 'package:turikumwe/models/notification.dart';
+import 'package:turikumwe/models/notification.dart' as custom_notification;
 import 'package:turikumwe/models/event_analytics.dart';
 
 class DatabaseService {
@@ -66,6 +69,8 @@ class DatabaseService {
       await db.execute('ALTER TABLE events ADD COLUMN category TEXT');
       await db.execute('ALTER TABLE events ADD COLUMN createdAt TEXT');
       await db.execute('ALTER TABLE events ADD COLUMN updatedAt TEXT');
+      await db.execute(
+          'ALTER TABLE events ADD COLUMN hasQuestionnaire INTEGER DEFAULT 0');
     }
     if (oldVersion < 3) {
       // Add isPublic column to groups table
@@ -81,13 +86,14 @@ class DatabaseService {
     if (oldVersion < 5) {
       // Add the missing columns to events table
       try {
-        await db.execute('ALTER TABLE events ADD COLUMN isPrivate INTEGER DEFAULT 0');
+        await db.execute(
+            'ALTER TABLE events ADD COLUMN isPrivate INTEGER DEFAULT 0');
         print("Added isPrivate column to events table");
       } catch (e) {
         print("Error adding isPrivate column: $e");
         // Column might already exist
       }
-      
+
       try {
         await db.execute('ALTER TABLE events ADD COLUMN price REAL');
         print("Added price column to events table");
@@ -95,7 +101,7 @@ class DatabaseService {
         print("Error adding price column: $e");
         // Column might already exist
       }
-      
+
       try {
         await db.execute('ALTER TABLE events ADD COLUMN paymentMethod TEXT');
         print("Added paymentMethod column to events table");
@@ -103,7 +109,7 @@ class DatabaseService {
         print("Error adding paymentMethod column: $e");
         // Column might already exist
       }
-      
+
       // Create event_analytics table
       try {
         await db.execute('''
@@ -121,6 +127,40 @@ class DatabaseService {
       } catch (e) {
         print("Error creating event_analytics table: $e");
         // Table might already exist
+      }
+    }
+    if (oldVersion < 6) {
+      // Add questionnaire columns to events table
+      try {
+        await db.execute(
+            'ALTER TABLE events ADD COLUMN hasQuestionnaire INTEGER DEFAULT 0');
+        await db
+            .execute('ALTER TABLE events ADD COLUMN questionnaireData TEXT');
+        print("Added questionnaire columns to events table");
+      } catch (e) {
+        print("Error adding questionnaire columns: $e");
+      }
+
+      // Create attendee_registrations table for tracking payments and questionnaire responses
+      try {
+        await db.execute('''
+      CREATE TABLE attendee_registrations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        eventId INTEGER NOT NULL,
+        userId INTEGER NOT NULL,
+        paymentStatus TEXT,
+        paymentReference TEXT,
+        paymentAmount REAL,
+        paymentDate TEXT,
+        questionnaireResponses TEXT,
+        registrationDate TEXT NOT NULL,
+        FOREIGN KEY (eventId) REFERENCES events (id),
+        FOREIGN KEY (userId) REFERENCES users (id)
+      )
+    ''');
+        print("Created attendee_registrations table");
+      } catch (e) {
+        print("Error creating attendee_registrations table: $e");
       }
     }
   }
@@ -203,25 +243,24 @@ class DatabaseService {
     // Events table - updated with new columns
     await db.execute('''
        CREATE TABLE events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        description TEXT NOT NULL,
-        date TEXT NOT NULL,
-        location TEXT NOT NULL,
-        image TEXT,
-        groupId INTEGER,
-        organizerId INTEGER NOT NULL,
-        attendeesIds TEXT,
-        district TEXT,
-        category TEXT,
-        isPrivate INTEGER DEFAULT 0,
-        price REAL,
-        paymentMethod TEXT,
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL,
-        FOREIGN KEY (groupId) REFERENCES groups (id),
-        FOREIGN KEY (organizerId) REFERENCES users (id)
-      )
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    date TEXT NOT NULL,
+    location TEXT NOT NULL,
+    image TEXT,
+    groupId INTEGER,
+    organizerId INTEGER NOT NULL,
+    district TEXT,
+    category TEXT,
+    createdAt TEXT,
+    updatedAt TEXT,
+    isPrivate INTEGER DEFAULT 0,
+    price REAL,
+    paymentMethod TEXT,
+    hasQuestionnaire INTEGER DEFAULT 0,  // Make sure this column exists
+    questionnaireData TEXT
+  )
     ''');
 
     // Event Analytics table
@@ -540,17 +579,14 @@ class DatabaseService {
     return true;
   }
 
-  // Add a member to a group
   Future<int> addGroupMember(Map<String, dynamic> member) async {
     final db = await database;
     return await db.insert('group_members', member);
   }
 
-  // Get all members of a group
   Future<List<Map<String, dynamic>>> getGroupMembers(int groupId) async {
     final db = await database;
 
-    // Join group_members with users to get user details
     final List<Map<String, dynamic>> results = await db.rawQuery('''
       SELECT gm.*, u.*
       FROM group_members gm
@@ -559,7 +595,6 @@ class DatabaseService {
       ORDER BY gm.isAdmin DESC, u.name ASC
     ''', [groupId]);
 
-    // Convert to more usable format with User objects
     return results.map((row) {
       final user = User.fromMap({
         'id': row['userId'],
@@ -630,7 +665,6 @@ class DatabaseService {
     final group = await getGroupById(groupId);
     if (group == null) return null;
 
-    // Increment members count
     final newCount = group.membersCount + 1;
     await db.update(
       'groups',
@@ -639,19 +673,15 @@ class DatabaseService {
       whereArgs: [groupId],
     );
 
-    // Return updated group
     return await getGroupById(groupId);
   }
 
-  // Decrement group members count
   Future<Group?> decrementGroupMembersCount(int groupId) async {
     final db = await database;
 
-    // Get current group
     final group = await getGroupById(groupId);
     if (group == null) return null;
 
-    // Ensure count doesn't go below 0
     final newCount = group.membersCount > 0 ? group.membersCount - 1 : 0;
     await db.update(
       'groups',
@@ -660,15 +690,12 @@ class DatabaseService {
       whereArgs: [groupId],
     );
 
-    // Return updated group
     return await getGroupById(groupId);
   }
 
-  // Get user's groups
   Future<List<Group>> getUserGroups(int userId) async {
     final db = await database;
 
-    // Join group_members with groups to get groups where user is a member
     final List<Map<String, dynamic>> results = await db.rawQuery('''
       SELECT g.*
       FROM groups g
@@ -696,7 +723,6 @@ class DatabaseService {
     return results.map((map) => Group.fromMap(map)).toList();
   }
 
-  // Search groups by name or description
   Future<List<Group>> searchGroups(String query) async {
     final db = await database;
 
@@ -715,10 +741,7 @@ class DatabaseService {
   Future<void> likePost(int postId, int userId) async {
     final db = await database;
 
-    // Start a transaction
     await db.transaction((txn) async {
-      // Check if there's a likes table, create if it doesn't exist
-      // Fix the SQL syntax by removing extra parentheses
       await txn.execute('''
       CREATE TABLE IF NOT EXISTS post_likes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -756,10 +779,10 @@ class DatabaseService {
     if (!event.containsKey('updatedAt')) {
       event['updatedAt'] = DateTime.now().toIso8601String();
     }
-    
+
     // Check and update the database schema if needed
     await _ensureEventSchemaUpdated(db);
-    
+
     // Convert boolean isPrivate to integer (SQLite doesn't have boolean type)
     if (event.containsKey('isPrivate') && event['isPrivate'] is bool) {
       event['isPrivate'] = event['isPrivate'] ? 1 : 0;
@@ -767,34 +790,70 @@ class DatabaseService {
 
     return await db.insert('events', event);
   }
-  
-  // Helper method to make sure the events table has all required columns
+
   Future<void> _ensureEventSchemaUpdated(Database db) async {
     try {
-      // Check for isPrivate column - if this doesn't throw an error, the column exists
+      await db.rawQuery('SELECT hasQuestionnaire FROM events LIMIT 1');
+      print('hasQuestionnaire column already exists');
+    } catch (e) {
+      try {
+        await db.execute(
+            'ALTER TABLE events ADD COLUMN hasQuestionnaire INTEGER DEFAULT 0');
+        print('Added hasQuestionnaire column to events table');
+      } catch (alterError) {
+        print('Error adding hasQuestionnaire column: $alterError');
+      }
+    }
+
+    try {
       await db.rawQuery('SELECT isPrivate FROM events LIMIT 1');
+      print('isPrivate column already exists');
     } catch (e) {
-      // Column doesn't exist, add it
-      await db.execute('ALTER TABLE events ADD COLUMN isPrivate INTEGER DEFAULT 0');
-      print('Added isPrivate column to events table');
+      try {
+        await db.execute(
+            'ALTER TABLE events ADD COLUMN isPrivate INTEGER DEFAULT 0');
+        print('Added isPrivate column to events table');
+      } catch (alterError) {
+        print('Error adding isPrivate column: $alterError');
+      }
     }
 
     try {
-      // Check for price column
       await db.rawQuery('SELECT price FROM events LIMIT 1');
+      print('price column already exists');
     } catch (e) {
-      // Column doesn't exist, add it
-      await db.execute('ALTER TABLE events ADD COLUMN price REAL');
-      print('Added price column to events table');
+      try {
+        await db.execute('ALTER TABLE events ADD COLUMN price REAL');
+        print('Added price column to events table');
+      } catch (alterError) {
+        print('Error adding price column: $alterError');
+      }
     }
 
     try {
-      // Check for paymentMethod column
       await db.rawQuery('SELECT paymentMethod FROM events LIMIT 1');
+      print('paymentMethod column already exists');
     } catch (e) {
-      // Column doesn't exist, add it
-      await db.execute('ALTER TABLE events ADD COLUMN paymentMethod TEXT');
-      print('Added paymentMethod column to events table');
+      try {
+        await db.execute('ALTER TABLE events ADD COLUMN paymentMethod TEXT');
+        print('Added paymentMethod column to events table');
+      } catch (alterError) {
+        print('Error adding paymentMethod column: $alterError');
+      }
+    }
+
+    // Check for questionnaireData column
+    try {
+      await db.rawQuery('SELECT questionnaireData FROM events LIMIT 1');
+      print('questionnaireData column already exists');
+    } catch (e) {
+      try {
+        await db
+            .execute('ALTER TABLE events ADD COLUMN questionnaireData TEXT');
+        print('Added questionnaireData column to events table');
+      } catch (alterError) {
+        print('Error adding questionnaireData column: $alterError');
+      }
     }
   }
 
@@ -812,7 +871,6 @@ class DatabaseService {
         // Try again
         return await insertEvent(event);
       } else {
-        // If it's some other error, rethrow it
         rethrow;
       }
     }
@@ -898,22 +956,63 @@ class DatabaseService {
 
   // Update an event
   Future<int> updateEvent(Map<String, dynamic> event) async {
-    final db = await database;
+    try {
+      final db = await database;
 
-    // Add update timestamp
-    event['updatedAt'] = DateTime.now().toIso8601String();
-    
-    // Convert boolean isPrivate to integer for SQLite
-    if (event.containsKey('isPrivate') && event['isPrivate'] is bool) {
-      event['isPrivate'] = event['isPrivate'] ? 1 : 0;
+      // Create a copy to avoid modifying the original map
+      final Map<String, dynamic> sanitizedEvent = Map.from(event);
+
+      // Add update timestamp
+      sanitizedEvent['updatedAt'] = DateTime.now().toIso8601String();
+
+      // Ensure questionnaireData is properly formatted as a string
+      if (sanitizedEvent.containsKey('questionnaireData')) {
+        final questionnaireData = sanitizedEvent['questionnaireData'];
+        if (questionnaireData != null) {
+          // If it's already a string, validate it's proper JSON
+          if (questionnaireData is String) {
+            try {
+              jsonDecode(questionnaireData);
+            } catch (e) {
+              debugPrint('Invalid JSON in questionnaireData: $e');
+              // If invalid, set to null to avoid database errors
+              sanitizedEvent['questionnaireData'] = null;
+            }
+          }
+          // If it's a Map or other object, convert to JSON string
+          else {
+            try {
+              sanitizedEvent['questionnaireData'] =
+                  jsonEncode(questionnaireData);
+            } catch (e) {
+              debugPrint('Error encoding questionnaireData: $e');
+              sanitizedEvent['questionnaireData'] = null;
+            }
+          }
+        }
+      }
+
+      // Convert boolean fields to integers for SQLite
+      for (final key in ['isPrivate', 'hasQuestionnaire']) {
+        if (sanitizedEvent.containsKey(key)) {
+          final value = sanitizedEvent[key];
+          if (value is bool) {
+            sanitizedEvent[key] = value ? 1 : 0;
+          }
+        }
+      }
+
+      return await db.update(
+        'events',
+        sanitizedEvent,
+        where: 'id = ?',
+        whereArgs: [sanitizedEvent['id']],
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      debugPrint('Error in updateEvent: $e');
+      return 0; // Return 0 to indicate failure
     }
-
-    return await db.update(
-      'events',
-      event,
-      where: 'id = ?',
-      whereArgs: [event['id']],
-    );
   }
 
   // Delete an event
@@ -926,24 +1025,77 @@ class DatabaseService {
     );
   }
 
-  // Get events a user is attending
   Future<List<Event>> getEventsUserIsAttending(int userId) async {
-    final db = await database;
+    try {
+      final db = await database;
 
-    // This query searches for the userId in the attendeesIds field
-    // It's a bit complex as we need to search in a comma-separated list
-    final List<Map<String, dynamic>> maps = await db.rawQuery(
-        "SELECT * FROM events WHERE attendeesIds LIKE ? OR attendeesIds LIKE ? OR attendeesIds LIKE ? OR attendeesIds = ? ORDER BY date ASC",
-        [
-          "%,$userId,%", // Middle attendee
-          "$userId,%", // First attendee
-          "%,$userId", // Last attendee
-          "$userId" // Only attendee
-        ]);
+      // Get all registrations for this user
+      final registrations = await db.query(
+        'event_registrations',
+        where: 'userId = ?',
+        whereArgs: [userId],
+      );
 
-    return List.generate(maps.length, (i) {
-      return Event.fromMap(maps[i]);
-    });
+      // If no registrations, return empty list
+      if (registrations.isEmpty) {
+        return [];
+      }
+
+      // Get event IDs from registrations
+      final eventIds =
+          registrations.map((reg) => reg['eventId'] as int).toSet().toList();
+
+      // Get events for these IDs
+      final events = <Event>[];
+      for (final eventId in eventIds) {
+        final event = await getEventById(eventId);
+        if (event != null) {
+          events.add(event);
+        }
+      }
+
+      // Sort events by date
+      events.sort((a, b) => a.date.compareTo(b.date));
+
+      return events;
+    } catch (e) {
+      debugPrint('Error getting events user is attending: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getUserEventRegistrations(
+      int userId) async {
+    try {
+      final db = await database;
+
+      // Get all registrations for this user
+      final registrations = await db.query(
+        'event_registrations',
+        where: 'userId = ?',
+        whereArgs: [userId],
+      );
+
+      // Enhance with event details
+      List<Map<String, dynamic>> enhancedRegistrations = [];
+
+      for (final reg in registrations) {
+        final eventId = reg['eventId'] as int;
+        final event = await getEventById(eventId);
+
+        if (event != null) {
+          enhancedRegistrations.add({
+            ...Map<String, dynamic>.from(reg),
+            'event': event,
+          });
+        }
+      }
+
+      return enhancedRegistrations;
+    } catch (e) {
+      debugPrint('Error getting user event registrations: $e');
+      return [];
+    }
   }
 
   // Get popular events (most attendees)
@@ -1062,61 +1214,126 @@ class DatabaseService {
     return attendeesList.contains(userId);
   }
 
-  // Add a user to event attendees
   Future<bool> addUserToEventAttendees(int userId, int eventId) async {
-    final event = await getEventById(eventId);
-    if (event == null) {
-      return false;
-    }
+    try {
+      final db = await database;
 
-    List<int> attendeesList = [];
-    if (event.attendeesIds != null && event.attendeesIds!.isNotEmpty) {
-      final List<String> attendeesStrList = event.attendeesIds!.split(',');
-      attendeesList =
-          attendeesStrList.map((id) => int.parse(id.trim())).toList();
-    }
+      // Get the current event
+      final events = await db.query(
+        'events',
+        where: 'id = ?',
+        whereArgs: [eventId],
+      );
 
-    if (!attendeesList.contains(userId)) {
-      attendeesList.add(userId);
+      if (events.isEmpty) {
+        return false;
+      }
 
-      final result = await updateEvent({
-        'id': eventId,
-        'attendeesIds': attendeesList.join(','),
-      });
+      final event = events.first;
+      String attendeesIds = event['attendeesIds'] as String? ?? '';
+
+      // Parse current attendees
+      List<String> attendeesList = attendeesIds.isEmpty
+          ? []
+          : attendeesIds
+              .split(',')
+              .where((id) => id.trim().isNotEmpty)
+              .toList();
+
+      // Check if user is already in the list
+      final userIdStr = userId.toString();
+      if (!attendeesList.contains(userIdStr)) {
+        attendeesList.add(userIdStr);
+      }
+
+      // Update the event with new attendees list
+      final updatedAttendeesIds = attendeesList.join(',');
+      final result = await db.update(
+        'events',
+        {'attendeesIds': updatedAttendeesIds},
+        where: 'id = ?',
+        whereArgs: [eventId],
+      );
+
+      // Also update the registration status to 'registered'
+      if (result > 0) {
+        await db.update(
+          'event_registrations',
+          {
+            'status': 'registered',
+            'updatedAt': DateTime.now().toIso8601String(),
+          },
+          where: 'eventId = ? AND userId = ?',
+          whereArgs: [eventId, userId],
+        );
+      }
 
       return result > 0;
+    } catch (e) {
+      debugPrint('Error adding user to event attendees: $e');
+      return false;
     }
-
-    return true; // User already attending
   }
 
-  // Remove a user from event attendees
   Future<bool> removeUserFromEventAttendees(int userId, int eventId) async {
-    final event = await getEventById(eventId);
-    if (event == null ||
-        event.attendeesIds == null ||
-        event.attendeesIds!.isEmpty) {
-      return false;
-    }
+    try {
+      final db = await database;
 
-    final List<String> attendeesStrList = event.attendeesIds!.split(',');
-    final List<int> attendeesList =
-        attendeesStrList.map((id) => int.parse(id.trim())).toList();
+      // Get the current event
+      final events = await db.query(
+        'events',
+        where: 'id = ?',
+        whereArgs: [eventId],
+      );
 
-    if (attendeesList.contains(userId)) {
-      attendeesList.remove(userId);
+      if (events.isEmpty) {
+        return false;
+      }
 
-      final result = await updateEvent({
-        'id': eventId,
-        'attendeesIds': attendeesList.isEmpty ? '' : attendeesList.join(','),
-      });
+      final event = events.first;
+      String attendeesIds = event['attendeesIds'] as String? ?? '';
+
+      // Parse current attendees
+      List<String> attendeesList = attendeesIds.isEmpty
+          ? []
+          : attendeesIds
+              .split(',')
+              .where((id) => id.trim().isNotEmpty)
+              .toList();
+
+      // Remove the user
+      final userIdStr = userId.toString();
+      attendeesList.remove(userIdStr);
+
+      // Update the event with new attendees list
+      final updatedAttendeesIds = attendeesList.join(',');
+      final result = await db.update(
+        'events',
+        {'attendeesIds': updatedAttendeesIds},
+        where: 'id = ?',
+        whereArgs: [eventId],
+      );
+
+      // Also update the registration status to 'canceled'
+      if (result > 0) {
+        await db.update(
+          'event_registrations',
+          {
+            'status': 'canceled',
+            'updatedAt': DateTime.now().toIso8601String(),
+          },
+          where: 'eventId = ? AND userId = ?',
+          whereArgs: [eventId, userId],
+        );
+      }
 
       return result > 0;
+    } catch (e) {
+      debugPrint('Error removing user from event attendees: $e');
+      return false;
     }
-
-    return true; // User wasn't attending
   }
-  
+
   // Story methods
   Future<int> insertStory(Map<String, dynamic> story) async {
     final db = await database;
@@ -1170,7 +1387,7 @@ class DatabaseService {
       whereArgs: [id],
     );
   }
-  
+
   // Message methods
   Future<List<Message>> getMessages(
       {int? senderId, int? receiverId, int? groupId}) async {
@@ -1274,7 +1491,7 @@ class DatabaseService {
 
     return await db.insert('messages', message);
   }
-  
+
   // Get chat conversations list
   Future<List<Map<String, dynamic>>> getChatConversations(int userId) async {
     final db = await database;
@@ -1340,7 +1557,7 @@ class DatabaseService {
     return await db.insert('notifications', notification);
   }
 
-  Future<List<Notification>> getNotifications(int userId,
+  Future<List<custom_notification.Notification>> getNotifications(int userId,
       {bool? isRead}) async {
     final db = await database;
 
@@ -1360,7 +1577,7 @@ class DatabaseService {
     );
 
     return List.generate(maps.length, (i) {
-      return Notification.fromMap(maps[i]);
+      return custom_notification.Notification.fromMap(maps[i]);
     });
   }
 
@@ -1373,7 +1590,7 @@ class DatabaseService {
       whereArgs: [id],
     );
   }
-  
+
   // Implementation for story likes functionality
   Future<void> toggleLikeStory(int storyId, int userId) async {
     final db = await database;
@@ -1478,7 +1695,7 @@ class DatabaseService {
       return Story.fromMap(results[i]);
     });
   }
-  
+
   // Get users who liked a story
   Future<List<User>> getUsersWhoLikedStory(int storyId) async {
     final db = await database;
@@ -1528,10 +1745,158 @@ class DatabaseService {
     });
   }
 
+  Future<int> safeInsertEvent(Map<String, dynamic> event) async {
+    try {
+      // Ensure database schema is up to date
+      await updateEventTableIfNeeded();
+
+      // Make a copy of the event data to avoid modifying the original
+      final Map<String, dynamic> sanitizedEvent = Map.from(event);
+
+      // Check if hasQuestionnaire exists in the map
+      if (!sanitizedEvent.containsKey('hasQuestionnaire')) {
+        // Add it with default value if the questionnaire data exists
+        sanitizedEvent['hasQuestionnaire'] =
+            (sanitizedEvent.containsKey('questionnaireData') &&
+                    sanitizedEvent['questionnaireData'] != null)
+                ? 1
+                : 0;
+      }
+
+      // Ensure questionnaireData is properly formatted as a string
+      if (sanitizedEvent.containsKey('questionnaireData')) {
+        final questionnaireData = sanitizedEvent['questionnaireData'];
+        if (questionnaireData != null) {
+          // If it's already a string, keep it as is
+          if (questionnaireData is String) {
+            // Validate it's proper JSON
+            try {
+              jsonDecode(questionnaireData);
+            } catch (e) {
+              debugPrint('Invalid JSON in questionnaireData: $e');
+              // If invalid, set to null to avoid database errors
+              sanitizedEvent['questionnaireData'] = null;
+              sanitizedEvent['hasQuestionnaire'] = 0;
+            }
+          }
+          // If it's a Map or other object, convert to JSON string
+          else {
+            try {
+              sanitizedEvent['questionnaireData'] =
+                  jsonEncode(questionnaireData);
+              sanitizedEvent['hasQuestionnaire'] = 1;
+            } catch (e) {
+              debugPrint('Error encoding questionnaireData: $e');
+              sanitizedEvent['questionnaireData'] = null;
+              sanitizedEvent['hasQuestionnaire'] = 0;
+            }
+          }
+        } else {
+          sanitizedEvent['hasQuestionnaire'] = 0;
+        }
+      }
+
+      // Handle boolean values (convert to 1/0 for SQLite)
+      for (final key in ['isPrivate', 'hasQuestionnaire']) {
+        if (sanitizedEvent.containsKey(key)) {
+          final value = sanitizedEvent[key];
+          if (value is bool) {
+            sanitizedEvent[key] = value ? 1 : 0;
+          }
+        }
+      }
+      final db = await database;
+      return await db.insert(
+        'events',
+        sanitizedEvent,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      debugPrint('Error in safeInsertEvent: $e');
+      return 0;
+    }
+  }
+
+  Future<int> registerForEvent(Map<String, dynamic> registration) async {
+    try {
+      final db = await database;
+
+      // Check if registration already exists
+      final existingRegistration = await db.query(
+        'event_registrations',
+        where: 'eventId = ? AND userId = ?',
+        whereArgs: [registration['eventId'], registration['userId']],
+      );
+
+      if (existingRegistration.isNotEmpty) {
+        // Update existing registration
+        return await db.update(
+          'event_registrations',
+          registration,
+          where: 'eventId = ? AND userId = ?',
+          whereArgs: [registration['eventId'], registration['userId']],
+        );
+      } else {
+        // Insert new registration
+        return await db.insert(
+          'event_registrations',
+          registration,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error registering for event: $e');
+      return 0;
+    }
+  }
+
+  Future<int> updateEventRegistration(
+      int eventId, int userId, String status, String paymentStatus) async {
+    try {
+      final db = await database;
+      return await db.update(
+        'event_registrations',
+        {
+          'status': status,
+          'paymentStatus': paymentStatus,
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
+        where: 'eventId = ? AND userId = ?',
+        whereArgs: [eventId, userId],
+      );
+    } catch (e) {
+      debugPrint('Error updating event registration: $e');
+      return 0;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getEventRegistration(
+      int eventId, int userId) async {
+    try {
+      final db = await database;
+
+      // Query for registration
+      final List<Map<String, dynamic>> registrations = await db.query(
+        'event_registrations',
+        where: 'eventId = ? AND userId = ?',
+        whereArgs: [eventId, userId],
+      );
+
+      if (registrations.isNotEmpty) {
+        return registrations.first;
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('Error getting event registration: $e');
+      return null;
+    }
+  }
+
   // Event Analytics methods
   Future<int> insertEventAnalytics(Map<String, dynamic> analytics) async {
     final db = await database;
-    
+
     // Ensure the table exists
     try {
       await db.query('event_analytics', limit: 1);
@@ -1549,29 +1914,29 @@ class DatabaseService {
         )
       ''');
     }
-    
+
     // Set lastUpdated if not provided
     if (!analytics.containsKey('lastUpdated')) {
       analytics['lastUpdated'] = DateTime.now().toIso8601String();
     }
-    
+
     return await db.insert('event_analytics', analytics);
   }
-  
+
   Future<EventAnalytics?> getEventAnalytics(int eventId) async {
     final db = await database;
-    
+
     try {
       final List<Map<String, dynamic>> maps = await db.query(
         'event_analytics',
         where: 'eventId = ?',
         whereArgs: [eventId],
       );
-      
+
       if (maps.isNotEmpty) {
         return EventAnalytics.fromMap(maps.first);
       }
-      
+
       // If no analytics exist for this event, create default entry
       final id = await insertEventAnalytics({
         'eventId': eventId,
@@ -1580,13 +1945,13 @@ class DatabaseService {
         'clickCount': 0,
         'lastUpdated': DateTime.now().toIso8601String(),
       });
-      
+
       final newMaps = await db.query(
         'event_analytics',
         where: 'id = ?',
         whereArgs: [id],
       );
-      
+
       if (newMaps.isNotEmpty) {
         return EventAnalytics.fromMap(newMaps.first);
       }
@@ -1594,17 +1959,17 @@ class DatabaseService {
       print('Error getting event analytics: $e');
       // The table might not exist yet
     }
-    
+
     return null;
   }
-  
+
   Future<void> incrementEventViewCount(int eventId) async {
     final db = await database;
-    
+
     try {
       // First check if analytics exist for this event
       final analytics = await getEventAnalytics(eventId);
-      
+
       if (analytics != null) {
         // Update existing record
         await db.update(
@@ -1630,14 +1995,14 @@ class DatabaseService {
       print('Error incrementing view count: $e');
     }
   }
-  
+
   Future<void> incrementEventShareCount(int eventId) async {
     final db = await database;
-    
+
     try {
       // First check if analytics exist for this event
       final analytics = await getEventAnalytics(eventId);
-      
+
       if (analytics != null) {
         // Update existing record
         await db.update(
@@ -1663,14 +2028,14 @@ class DatabaseService {
       print('Error incrementing share count: $e');
     }
   }
-  
+
   Future<void> incrementEventClickCount(int eventId) async {
     final db = await database;
-    
+
     try {
       // First check if analytics exist for this event
       final analytics = await getEventAnalytics(eventId);
-      
+
       if (analytics != null) {
         // Update existing record
         await db.update(
@@ -1696,37 +2061,12 @@ class DatabaseService {
       print('Error incrementing click count: $e');
     }
   }
-  
-  // Check if table needs updating
+
   Future<void> updateEventTableIfNeeded() async {
     final db = await database;
-
-    // Check if isPrivate column exists
-    try {
-      await db.rawQuery('SELECT isPrivate FROM events LIMIT 1');
-    } catch (e) {
-      // Column doesn't exist, add it
-      await db
-          .execute('ALTER TABLE events ADD COLUMN isPrivate INTEGER DEFAULT 0');
-    }
-
-    // Check if price column exists
-    try {
-      await db.rawQuery('SELECT price FROM events LIMIT 1');
-    } catch (e) {
-      // Column doesn't exist, add it
-      await db.execute('ALTER TABLE events ADD COLUMN price REAL');
-    }
-
-    // Check if paymentMethod column exists
-    try {
-      await db.rawQuery('SELECT paymentMethod FROM events LIMIT 1');
-    } catch (e) {
-      // Column doesn't exist, add it
-      await db.execute('ALTER TABLE events ADD COLUMN paymentMethod TEXT');
-    }
+    await _ensureEventSchemaUpdated(db);
   }
-  
+
   // Get users by IDs
   Future<List<User>> getUsersByIds(List<int> userIds) async {
     if (userIds.isEmpty) {
@@ -1751,23 +2091,7 @@ class DatabaseService {
 
     return users;
   }
-  
-  // Safe method to insert event that ensures the database schema is ready
-  Future<int> safeInsertEvent(Map<String, dynamic> event) async {
-    try {
-      return await insertEvent(event);
-    } catch (e) {
-      if (e.toString().contains('no column named isPrivate')) {
-        // Fix the database schema
-        await updateEventTableIfNeeded();
-        // Try again
-        return await insertEvent(event);
-      } else {
-        // If it's some other error, rethrow it
-        rethrow;
-      }
-    }
-  }
+
   Future<int> insertPost(Map<String, dynamic> post) async {
     final db = await database;
     return await db.insert('posts', post);
@@ -1791,7 +2115,7 @@ class DatabaseService {
   // Delete a post
   Future<int> deletePost(int id) async {
     final db = await database;
-    
+
     // Start a transaction to delete associated data
     return await db.transaction((txn) async {
       // Delete comments associated with this post
@@ -1800,7 +2124,7 @@ class DatabaseService {
         where: 'postId = ?',
         whereArgs: [id],
       );
-      
+
       // Delete post likes (if you have a post_likes table)
       try {
         await txn.delete(
@@ -1812,7 +2136,7 @@ class DatabaseService {
         // Table might not exist, that's okay
         print('No post_likes table found: $e');
       }
-      
+
       // Delete the post itself
       return await txn.delete(
         'posts',
@@ -1821,7 +2145,7 @@ class DatabaseService {
       );
     });
   }
-  
+
   // Get posts for the home feed - personal posts and group posts
   Future<List<Map<String, dynamic>>> getHomeFeeds() async {
     final db = await database;
@@ -1839,14 +2163,14 @@ class DatabaseService {
 
     return results;
   }
-  
+
   // Add a comment to a post
   Future<int> addComment(Map<String, dynamic> comment) async {
     final db = await database;
-    
+
     // Insert the comment
     final commentId = await db.insert('comments', comment);
-    
+
     // Increment the comments count on the post
     if (commentId > 0) {
       await db.rawUpdate(
@@ -1854,14 +2178,14 @@ class DatabaseService {
         [comment['postId']],
       );
     }
-    
+
     return commentId;
   }
-  
+
   // Get comments for a post
   Future<List<Map<String, dynamic>>> getCommentsForPost(int postId) async {
     final db = await database;
-    
+
     final List<Map<String, dynamic>> results = await db.rawQuery('''
     SELECT c.*, u.name as userName, u.profilePicture
     FROM comments c
@@ -1869,14 +2193,14 @@ class DatabaseService {
     WHERE c.postId = ?
     ORDER BY c.createdAt ASC
   ''', [postId]);
-    
+
     return results;
   }
-  
+
   // Toggle like on a post
   Future<bool> toggleLikePost(int postId, int userId) async {
     final db = await database;
-    
+
     // Check if post_likes table exists, create if it doesn't
     await db.execute('''
     CREATE TABLE IF NOT EXISTS post_likes (
@@ -1888,14 +2212,14 @@ class DatabaseService {
       FOREIGN KEY (userId) REFERENCES users (id)
     )
   ''');
-    
+
     // Check if user already liked the post
     final List<Map<String, dynamic>> existingLikes = await db.query(
       'post_likes',
       where: 'postId = ? AND userId = ?',
       whereArgs: [postId, userId],
     );
-    
+
     // If user has already liked the post, unlike it
     if (existingLikes.isNotEmpty) {
       await db.transaction((txn) async {
@@ -1905,16 +2229,16 @@ class DatabaseService {
           where: 'postId = ? AND userId = ?',
           whereArgs: [postId, userId],
         );
-        
+
         // Decrement the likes count
         await txn.rawUpdate(
           'UPDATE posts SET likesCount = MAX(0, likesCount - 1) WHERE id = ?',
           [postId],
         );
       });
-      
+
       return false; // Returning false means the post is now unliked
-    } 
+    }
     // Otherwise, like the post
     else {
       await db.transaction((txn) async {
@@ -1924,43 +2248,44 @@ class DatabaseService {
           'userId': userId,
           'createdAt': DateTime.now().toIso8601String(),
         });
-        
+
         // Increment the likes count
         await txn.rawUpdate(
           'UPDATE posts SET likesCount = likesCount + 1 WHERE id = ?',
           [postId],
         );
       });
-      
+
       return true; // Returning true means the post is now liked
     }
   }
-  
+
   // Check if user has liked a post
   Future<bool> hasUserLikedPost(int postId, int userId) async {
     final db = await database;
-    
+
     // Check if post_likes table exists
     final List<Map<String, dynamic>> tables = await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='post_likes'",
     );
-    
+
     if (tables.isEmpty) {
       return false; // Table doesn't exist yet
     }
-    
+
     // Check for like record
     final List<Map<String, dynamic>> likes = await db.query(
       'post_likes',
       where: 'postId = ? AND userId = ?',
       whereArgs: [postId, userId],
     );
-    
+
     return likes.isNotEmpty;
   }
+
   Future<bool> deleteComment(int commentId) async {
     final db = await database;
-    
+
     try {
       // Start a transaction to update post comment count and delete the comment
       return await db.transaction((txn) async {
@@ -1970,20 +2295,20 @@ class DatabaseService {
           where: 'id = ?',
           whereArgs: [commentId],
         );
-        
+
         if (comments.isEmpty) {
           return false;
         }
-        
+
         final postId = comments.first['postId'] as int;
-        
+
         // Delete the comment
         final deleteResult = await txn.delete(
           'comments',
           where: 'id = ?',
           whereArgs: [commentId],
         );
-        
+
         if (deleteResult > 0) {
           // Decrement the comments count on the post
           await txn.rawUpdate(
@@ -1992,7 +2317,7 @@ class DatabaseService {
           );
           return true;
         }
-        
+
         return false;
       });
     } catch (e) {
@@ -2000,11 +2325,11 @@ class DatabaseService {
       return false;
     }
   }
-  
+
   // Get user's comments
   Future<List<Map<String, dynamic>>> getUserComments(int userId) async {
     final db = await database;
-    
+
     final List<Map<String, dynamic>> results = await db.rawQuery('''
       SELECT c.*, p.content as postContent, p.userId as postUserId,
              u.name as postAuthorName, u.profilePicture as postAuthorPicture
@@ -2014,45 +2339,45 @@ class DatabaseService {
       WHERE c.userId = ?
       ORDER BY c.createdAt DESC
     ''', [userId]);
-    
+
     return results;
   }
-  
+
   // Get popular posts (most comments and likes)
   Future<List<Post>> getPopularPosts({int limit = 10}) async {
     final db = await database;
-    
+
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
       SELECT * FROM posts
       ORDER BY (likesCount + commentsCount) DESC
       LIMIT ?
     ''', [limit]);
-    
+
     return List.generate(maps.length, (i) {
       return Post.fromMap(maps[i]);
     });
   }
-  
+
   // Search for posts by content
   Future<List<Post>> searchPosts(String query) async {
     final db = await database;
-    
+
     final List<Map<String, dynamic>> maps = await db.query(
       'posts',
       where: 'content LIKE ?',
       whereArgs: ['%$query%'],
       orderBy: 'createdAt DESC',
     );
-    
+
     return List.generate(maps.length, (i) {
       return Post.fromMap(maps[i]);
     });
   }
-  
+
   // Get detailed post data including author and group info
   Future<Map<String, dynamic>?> getPostDetails(int postId) async {
     final db = await database;
-    
+
     final List<Map<String, dynamic>> results = await db.rawQuery('''
       SELECT p.*, u.name as authorName, u.profilePicture as authorProfilePicture,
              g.name as groupName, g.id as groupId, g.image as groupImage
@@ -2061,18 +2386,19 @@ class DatabaseService {
       LEFT JOIN groups g ON p.groupId = g.id
       WHERE p.id = ?
     ''', [postId]);
-    
+
     if (results.isEmpty) {
       return null;
     }
-    
+
     return results.first;
   }
-  
+
   // Get recent comments for a post
-  Future<List<Map<String, dynamic>>> getRecentCommentsForPost(int postId, {int limit = 3}) async {
+  Future<List<Map<String, dynamic>>> getRecentCommentsForPost(int postId,
+      {int limit = 3}) async {
     final db = await database;
-    
+
     final List<Map<String, dynamic>> results = await db.rawQuery('''
       SELECT c.*, u.name as userName, u.profilePicture as userProfilePicture
       FROM comments c
@@ -2081,24 +2407,25 @@ class DatabaseService {
       ORDER BY c.createdAt DESC
       LIMIT ?
     ''', [postId, limit]);
-    
+
     return results;
   }
-   Future<void> incrementShareCount(int postId) async {
+
+  Future<void> incrementShareCount(int postId) async {
     final db = await database;
-    
+
     try {
       // Update the share count in a dedicated analytics table if it exists
       try {
         await db.rawQuery('SELECT * FROM post_analytics LIMIT 1');
-        
+
         // Check if this post has an analytics entry
         final List<Map<String, dynamic>> analytics = await db.query(
           'post_analytics',
           where: 'postId = ?',
           whereArgs: [postId],
         );
-        
+
         if (analytics.isEmpty) {
           // Create new analytics entry
           await db.insert('post_analytics', {
@@ -2132,7 +2459,7 @@ class DatabaseService {
             FOREIGN KEY (postId) REFERENCES posts (id)
           )
         ''');
-        
+
         // Then create the entry
         await db.insert('post_analytics', {
           'postId': postId,
@@ -2141,7 +2468,7 @@ class DatabaseService {
           'lastUpdated': DateTime.now().toIso8601String(),
         });
       }
-      
+
       // Also update the likes count in the post itself if you want to track it there
       // This is optional but can be useful for quick access
       await db.rawUpdate(
@@ -2153,11 +2480,11 @@ class DatabaseService {
       // Don't rethrow, as this is a non-critical operation
     }
   }
-  
+
   // Share a post
   Future<bool> sharePost(int postId, int userId, String shareType) async {
     final db = await database;
-    
+
     try {
       // Record the share activity
       await db.insert('share_activity', {
@@ -2166,14 +2493,14 @@ class DatabaseService {
         'shareType': shareType, // e.g., 'external', 'internal'
         'timestamp': DateTime.now().toIso8601String(),
       });
-      
+
       // Increment the share count
       await incrementShareCount(postId);
-      
+
       return true;
     } catch (e) {
       print('Error recording share: $e');
-      
+
       // Try to create the table if it doesn't exist
       try {
         await db.execute('''
@@ -2187,7 +2514,7 @@ class DatabaseService {
             FOREIGN KEY (userId) REFERENCES users (id)
           )
         ''');
-        
+
         // Try again after creating the table
         await db.insert('share_activity', {
           'postId': postId,
@@ -2195,9 +2522,9 @@ class DatabaseService {
           'shareType': shareType,
           'timestamp': DateTime.now().toIso8601String(),
         });
-        
+
         await incrementShareCount(postId);
-        
+
         return true;
       } catch (e2) {
         print('Error creating share_activity table: $e2');
@@ -2205,18 +2532,241 @@ class DatabaseService {
       }
     }
   }
-  
+
   // Update posts table to include sharesCount if it doesn't exist
   Future<void> ensureSharesCountColumn() async {
     final db = await database;
-    
+
     try {
       // Try to query the sharesCount column
       await db.rawQuery('SELECT sharesCount FROM posts LIMIT 1');
     } catch (e) {
       // Column doesn't exist, add it
       print('Adding sharesCount column to posts table');
-      await db.execute('ALTER TABLE posts ADD COLUMN sharesCount INTEGER DEFAULT 0');
+      await db.execute(
+          'ALTER TABLE posts ADD COLUMN sharesCount INTEGER DEFAULT 0');
+    }
+  }
+
+  // Record payment for an event
+  Future<bool> recordEventPayment(Map<String, dynamic> paymentData) async {
+    final db = await database;
+
+    try {
+      // Check if there's already a registration
+      final List<Map<String, dynamic>> existing = await db.query(
+        'attendee_registrations',
+        where: 'eventId = ? AND userId = ?',
+        whereArgs: [paymentData['eventId'], paymentData['userId']],
+      );
+
+      if (existing.isEmpty) {
+        // Create new registration with payment data
+        await db.insert('attendee_registrations', {
+          'eventId': paymentData['eventId'],
+          'userId': paymentData['userId'],
+          'paymentStatus': paymentData['paymentStatus'],
+          'paymentReference': paymentData['paymentReference'],
+          'paymentAmount': paymentData['paymentAmount'],
+          'paymentDate':
+              paymentData['paymentDate'] ?? DateTime.now().toIso8601String(),
+          'registrationDate': DateTime.now().toIso8601String(),
+        });
+      } else {
+        // Update existing registration with payment data
+        await db.update(
+          'attendee_registrations',
+          {
+            'paymentStatus': paymentData['paymentStatus'],
+            'paymentReference': paymentData['paymentReference'],
+            'paymentAmount': paymentData['paymentAmount'],
+            'paymentDate':
+                paymentData['paymentDate'] ?? DateTime.now().toIso8601String(),
+          },
+          where: 'eventId = ? AND userId = ?',
+          whereArgs: [paymentData['eventId'], paymentData['userId']],
+        );
+      }
+
+      // If payment is successful, also add user to event attendees
+      if (paymentData['paymentStatus'] == 'completed') {
+        await addUserToEventAttendees(
+            paymentData['userId'], paymentData['eventId']);
+      }
+
+      return true;
+    } catch (e) {
+      print('Error recording event payment: $e');
+      return false;
+    }
+  }
+
+// Save questionnaire responses for an event
+  Future<bool> saveQuestionnaireResponses(
+      int eventId, int userId, String responses) async {
+    final db = await database;
+
+    try {
+      // Check if there's already a registration
+      final List<Map<String, dynamic>> existing = await db.query(
+        'attendee_registrations',
+        where: 'eventId = ? AND userId = ?',
+        whereArgs: [eventId, userId],
+      );
+
+      if (existing.isEmpty) {
+        // Create new registration with questionnaire data
+        await db.insert('attendee_registrations', {
+          'eventId': eventId,
+          'userId': userId,
+          'questionnaireResponses': responses,
+          'registrationDate': DateTime.now().toIso8601String(),
+        });
+      } else {
+        // Update existing registration with questionnaire data
+        await db.update(
+          'attendee_registrations',
+          {
+            'questionnaireResponses': responses,
+          },
+          where: 'eventId = ? AND userId = ?',
+          whereArgs: [eventId, userId],
+        );
+      }
+
+      return true;
+    } catch (e) {
+      print('Error saving questionnaire responses: $e');
+      return false;
+    }
+  }
+
+  Future<void> _ensureTablesExist(Database db) async {
+    try {
+      // Check if event_registrations table exists
+      try {
+        await db.query('event_registrations', limit: 1);
+        print('event_registrations table exists');
+      } catch (e) {
+        print('Creating event_registrations table');
+        await db.execute('''
+      CREATE TABLE event_registrations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        eventId INTEGER NOT NULL,
+        userId INTEGER NOT NULL,
+        registrationDate TEXT,
+        status TEXT,
+        paymentStatus TEXT,
+        paymentReference TEXT,
+        updatedAt TEXT,
+        UNIQUE(eventId, userId)
+      )
+      ''');
+      }
+
+      // Other table checks...
+    } catch (e) {
+      print('Error ensuring tables exist: $e');
+    }
+  }
+
+// Get attendee registration details including payment status and questionnaire responses
+  Future<Map<String, dynamic>?> getAttendeeRegistration(
+      int eventId, int userId) async {
+    try {
+      final db = await database;
+
+      final registrations = await db.query(
+        'event_registrations',
+        where: 'eventId = ? AND userId = ?',
+        whereArgs: [eventId, userId],
+      );
+
+      if (registrations.isNotEmpty) {
+        return registrations.first;
+      }
+
+      // Then check if user is in attendees list
+      final events = await db.query(
+        'events',
+        where: 'id = ?',
+        whereArgs: [eventId],
+      );
+
+      if (events.isNotEmpty) {
+        final event = events.first;
+        final attendeesIds = event['attendeesIds'] as String? ?? '';
+
+        if (attendeesIds.isNotEmpty) {
+          final attendeesList = attendeesIds
+              .split(',')
+              .where((id) => id.trim().isNotEmpty)
+              .map((id) => int.parse(id.trim()))
+              .toList();
+
+          if (attendeesList.contains(userId)) {
+            // Create a synthetic registration
+            return {
+              'eventId': eventId,
+              'userId': userId,
+              'status': 'registered',
+              'paymentStatus': 'completed',
+              'registrationDate': event['createdAt'],
+            };
+          }
+        }
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('Error getting attendee registration: $e');
+      return null;
+    }
+  }
+
+  Future<bool> hasUserPaidForEvent(int eventId, int userId) async {
+    try {
+      final db = await database;
+
+      final payments = await db.query(
+        'event_payments',
+        where: 'eventId = ? AND userId = ? AND paymentStatus = ?',
+        whereArgs: [eventId, userId, 'completed'],
+      );
+      if (payments.isEmpty) {
+        final registrations = await db.query(
+          'event_registrations',
+          where: 'eventId = ? AND userId = ? AND paymentStatus = ?',
+          whereArgs: [eventId, userId, 'completed'],
+        );
+
+        return registrations.isNotEmpty;
+      }
+
+      return payments.isNotEmpty;
+    } catch (e) {
+      debugPrint('Error checking if user paid for event: $e');
+      return false;
+    }
+  }
+
+// Get all registrations for an event (with user details)
+  Future<List<Map<String, dynamic>>> getEventRegistrations(int eventId) async {
+    final db = await database;
+
+    try {
+      final List<Map<String, dynamic>> results = await db.rawQuery('''
+      SELECT r.*, u.name, u.email, u.phoneNumber, u.profilePicture
+      FROM attendee_registrations r
+      JOIN users u ON r.userId = u.id
+      WHERE r.eventId = ?
+      ORDER BY r.registrationDate DESC
+    ''', [eventId]);
+
+      return results;
+    } catch (e) {
+      print('Error getting event registrations: $e');
+      return [];
     }
   }
 }

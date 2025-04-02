@@ -17,26 +17,27 @@ class MessagesScreen extends StatefulWidget {
   State<MessagesScreen> createState() => _MessagesScreenState();
 }
 
-class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProviderStateMixin {
+class _MessagesScreenState extends State<MessagesScreen>
+    with SingleTickerProviderStateMixin {
   final DatabaseService _databaseService = DatabaseService();
   late TabController _tabController;
   bool _isLoading = true;
   List<Map<String, dynamic>> _conversations = [];
   List<Map<String, dynamic>> _directChats = [];
   List<Map<String, dynamic>> _groupChats = [];
-  
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadConversations();
-    
+
     // Set up listener to refresh when returning to this screen
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _setupNavListener();
     });
   }
-  
+
   void _setupNavListener() {
     // Listen for navigation events to refresh data when returning to this screen
     final navigator = Navigator.of(context);
@@ -57,7 +58,8 @@ class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProvid
   }
 
   Future<void> _loadConversations() async {
-    final currentUser = Provider.of<AuthService>(context, listen: false).currentUser;
+    final currentUser =
+        Provider.of<AuthService>(context, listen: false).currentUser;
     if (currentUser == null) return;
 
     setState(() {
@@ -65,12 +67,15 @@ class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProvid
     });
 
     try {
-      final conversations = await _databaseService.getChatConversations(currentUser.id);
-      
+      final conversations =
+          await _databaseService.getChatConversations(currentUser.id);
+
       // Separate direct chats and group chats
-      final directChats = conversations.where((chat) => chat['isGroup'] != 1).toList();
-      final groupChats = conversations.where((chat) => chat['isGroup'] == 1).toList();
-      
+      final directChats =
+          conversations.where((chat) => chat['isGroup'] != 1).toList();
+      final groupChats =
+          conversations.where((chat) => chat['isGroup'] == 1).toList();
+
       setState(() {
         _conversations = conversations;
         _directChats = directChats;
@@ -118,7 +123,7 @@ class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProvid
   String _formatLastMessageTime(String isoTimeString) {
     final dateTime = DateTime.parse(isoTimeString);
     final now = DateTime.now();
-    
+
     if (now.difference(dateTime).inHours < 24) {
       // Today, show time
       return DateFormat('h:mm a').format(dateTime);
@@ -131,17 +136,19 @@ class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProvid
     }
   }
 
-  Widget _buildConversationItem(Map<String, dynamic> conversation, bool isGroup) {
+  Widget _buildConversationItem(
+      Map<String, dynamic> conversation, bool isGroup) {
     final unreadCount = conversation['unreadCount'] ?? 0;
     final hasUnread = unreadCount > 0;
     final lastMessage = conversation['lastMessage'] ?? '';
-    final isSentByMe = conversation['lastMessageSenderId'] == 
+    final isSentByMe = conversation['lastMessageSenderId'] ==
         Provider.of<AuthService>(context, listen: false).currentUser?.id;
     final isRead = conversation['isLastMessageRead'] == 1;
-    
+
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: isGroup ? AppColors.primary.withOpacity(0.2) : Colors.grey.shade300,
+        backgroundColor:
+            isGroup ? AppColors.primary.withOpacity(0.2) : Colors.grey.shade300,
         backgroundImage: conversation['profilePicture'] != null
             ? NetworkImage(conversation['profilePicture']) as ImageProvider
             : null,
@@ -217,7 +224,8 @@ class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProvid
         ],
       ),
       onTap: () {
-        final id = isGroup ? conversation['groupId'] : conversation['otherUserId'];
+        final id =
+            isGroup ? conversation['groupId'] : conversation['otherUserId'];
         _openChat(
           id,
           conversation['name'] ?? 'Chat',
@@ -284,22 +292,6 @@ class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildGroupChatsTab() {
-    if (_groupChats.isEmpty) {
-      return _buildEmptyState(
-        title: 'No Group Chats',
-        message: 'Join or create a group to chat with multiple people',
-      );
-    }
-
-    return ListView.separated(
-      itemCount: _groupChats.length,
-      separatorBuilder: (context, index) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        return _buildConversationItem(_groupChats[index], true);
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -337,7 +329,7 @@ class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProvid
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Messages'),
+        title: const Text('Find People to Chat with'),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
@@ -351,7 +343,6 @@ class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProvid
           indicatorColor: AppColors.primary,
           tabs: const [
             Tab(text: 'Chats'),
-            Tab(text: 'Groups'),
           ],
         ),
       ),
@@ -361,7 +352,7 @@ class _MessagesScreenState extends State<MessagesScreen> with SingleTickerProvid
               controller: _tabController,
               children: [
                 _buildDirectChatsTab(),
-                _buildGroupChatsTab(),
+                
               ],
             ),
       floatingActionButton: FloatingActionButton(

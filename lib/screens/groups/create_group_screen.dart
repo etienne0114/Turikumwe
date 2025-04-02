@@ -116,9 +116,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
             Provider.of<AuthService>(context, listen: false).currentUser;
         if (currentUser == null) return;
 
-         String? imageUrl;
       if (_groupImage != null) {
-        imageUrl = await ServiceLocator.storage.uploadImage(_groupImage!);
       }
 
         // In a real app, you would upload the image to storage

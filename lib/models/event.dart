@@ -1,4 +1,5 @@
 // lib/models/event.dart
+import 'dart:convert';
 class Event {
   final int id;
   final String title;
@@ -16,6 +17,9 @@ class Event {
   final bool? isPrivate;
   final double? price;
   final String? paymentMethod;
+  final String? questionnaireId; // Added for questionnaire support
+  final bool? requiresApproval; // Added to control approval flow
+  final Map<String, dynamic>? questionnaireData; // Added to store questionnaire configuration
   
   Event({
     required this.id,
@@ -34,6 +38,9 @@ class Event {
     this.isPrivate,
     this.price,
     this.paymentMethod,
+    this.questionnaireId,
+    this.requiresApproval,
+    this.questionnaireData,
   });
   
   Map<String, dynamic> toMap() {
@@ -54,6 +61,9 @@ class Event {
       'isPrivate': isPrivate,
       'price': price,
       'paymentMethod': paymentMethod,
+      'questionnaireId': questionnaireId,
+      'requiresApproval': requiresApproval,
+      'questionnaireData': questionnaireData,
     };
   }
   
@@ -72,9 +82,16 @@ class Event {
       category: map['category'],
       createdAt: map['createdAt'],
       updatedAt: map['updatedAt'],
-      isPrivate: map['isPrivate'] == 1,
+      isPrivate: map['isPrivate'] == 1 || map['isPrivate'] == true,
       price: map['price'] != null ? (map['price'] is int ? map['price'].toDouble() : map['price']) : null,
       paymentMethod: map['paymentMethod'],
+      questionnaireId: map['questionnaireId'],
+      requiresApproval: map['requiresApproval'] == 1 || map['requiresApproval'] == true,
+      questionnaireData: map['questionnaireData'] != null 
+          ? (map['questionnaireData'] is String 
+              ? Map<String, dynamic>.from(jsonDecode(map['questionnaireData'])) 
+              : Map<String, dynamic>.from(map['questionnaireData']))
+          : null,
     );
   }
   
@@ -112,6 +129,38 @@ class Event {
     return price == null || price == 0;
   }
   
+  // Check if event has questionnaire
+  bool get hasQuestionnaire {
+    return questionnaireId != null;
+  }
+  
+  // Check if event is upcoming (in the future)
+  bool get isUpcoming {
+    return date.isAfter(DateTime.now());
+  }
+  
+  // Check if event is happening now (within 1 hour of start)
+  bool get isHappeningNow {
+    final now = DateTime.now();
+    final difference = date.difference(now);
+    return difference.inHours.abs() <= 1 && !isPast;
+  }
+  
+  // Format date for display
+  String get formattedDate {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final year = date.year.toString();
+    return "$day/$month/$year";
+  }
+  
+  // Format time for display
+  String get formattedTime {
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return "$hour:$minute";
+  }
+  
   // Create a copy of this event with updated fields
   Event copyWith({
     int? id,
@@ -130,6 +179,9 @@ class Event {
     bool? isPrivate,
     double? price,
     String? paymentMethod,
+    String? questionnaireId,
+    bool? requiresApproval,
+    Map<String, dynamic>? questionnaireData,
   }) {
     return Event(
       id: id ?? this.id,
@@ -148,6 +200,9 @@ class Event {
       isPrivate: isPrivate ?? this.isPrivate,
       price: price ?? this.price,
       paymentMethod: paymentMethod ?? this.paymentMethod,
+      questionnaireId: questionnaireId ?? this.questionnaireId,
+      requiresApproval: requiresApproval ?? this.requiresApproval,
+      questionnaireData: questionnaireData ?? this.questionnaireData,
     );
   }
 }

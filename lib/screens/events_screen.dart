@@ -14,7 +14,9 @@ import 'package:turikumwe/widgets/event_calendar_view.dart';
 import 'package:turikumwe/widgets/event_filter.dart';
 
 class EventsScreen extends StatefulWidget {
-  const EventsScreen({Key? key}) : super(key: key);
+  final int initialTabIndex;
+
+  const EventsScreen({Key? key, this.initialTabIndex = 0}) : super(key: key);
 
   @override
   State<EventsScreen> createState() => _EventsScreenState();
@@ -30,7 +32,6 @@ class _EventsScreenState extends State<EventsScreen>
   String? _selectedDistrict;
   bool _upcomingOnly = true;
   String _searchQuery = '';
-  DateTime _selectedDate = DateTime.now();
 
   // Lists for categories and districts
   final List<String> _eventCategories = [
@@ -55,13 +56,16 @@ class _EventsScreenState extends State<EventsScreen>
   ];
 
   final TextEditingController _searchController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    _tabController.addListener(_handleTabChange);
+    _tabController = TabController(
+      length: 3, 
+      vsync: this,
+      initialIndex: widget.initialTabIndex,
+    );
+    _tabController.addListener(_handleTabChange); 
     _loadEvents();
   }
 
@@ -70,10 +74,10 @@ class _EventsScreenState extends State<EventsScreen>
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     _searchController.dispose();
-    _scrollController.dispose();
     super.dispose();
   }
 
+  // Handle tab change events
   void _handleTabChange() {
     if (_tabController.indexIsChanging) {
       // Clear search when changing tabs
@@ -89,10 +93,14 @@ class _EventsScreenState extends State<EventsScreen>
     }
   }
 
+  // Load all events data
   Future<void> _loadEvents() async {
-    setState(() {
-      _isLoading = true;
-    });
+    // Set loading state at the beginning
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
 
     try {
       // Get the current user
@@ -105,7 +113,7 @@ class _EventsScreenState extends State<EventsScreen>
       List<Event> events = [];
 
       if (_searchQuery.isNotEmpty) {
-        // Search events - implement using existing methods
+        // Search events
         events = await _searchEvents(_searchQuery);
       } else if (_selectedCategory != null) {
         // Filter by category
@@ -127,8 +135,8 @@ class _EventsScreenState extends State<EventsScreen>
       }
       
       // Make sure we actually have events loaded
-      if (events.isEmpty) {
-        // Try without any filters as a fallback
+      if (events.isEmpty && fromDate != null) {
+        // Try without date filter as a fallback
         events = await DatabaseService().getEvents();
         debugPrint('Loaded ${events.length} events without filters');
       } else {
@@ -141,13 +149,19 @@ class _EventsScreenState extends State<EventsScreen>
       // Load "My Events" data if user is logged in
       List<Event> myEvents = [];
       if (currentUser != null) {
-        myEvents = await DatabaseService().getEventsUserIsAttending(currentUser.id);
-        debugPrint('Loaded ${myEvents.length} events for user ${currentUser.id}');
-        
-        // Sort my events by date (upcoming first)
-        myEvents.sort((a, b) => a.date.compareTo(b.date));
+        try {
+          myEvents = await DatabaseService().getEventsUserIsAttending(currentUser.id);
+          debugPrint('Loaded ${myEvents.length} events for user ${currentUser.id}');
+          
+          // Sort my events by date (upcoming first)
+          myEvents.sort((a, b) => a.date.compareTo(b.date));
+        } catch (e) {
+          debugPrint('Error loading user events: $e');
+          // Continue with empty myEvents list
+        }
       }
 
+      // Always set loading to false at the end, regardless of success
       if (mounted) {
         setState(() {
           _allEvents = events;
@@ -157,6 +171,7 @@ class _EventsScreenState extends State<EventsScreen>
       }
     } catch (e) {
       debugPrint('Error loading events: $e');
+      // Always set loading to false in case of error
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -168,6 +183,287 @@ class _EventsScreenState extends State<EventsScreen>
         );
       }
     }
+  }
+
+  // Refresh events data
+  Future<void> _refreshEvents() async {
+    if (!_isLoading) {
+      return _loadEvents();
+    }
+    return Future.value();
+  }
+
+  // Build the All Events tab
+  Widget _buildAllEventsTab() {
+    return RefreshIndicator(
+      onRefresh: _refreshEvents,
+      child: _isLoading 
+        ? const Center(child: CircularProgressIndicator())
+        : _allEvents.isEmpty
+          ? ListView(
+              children: [
+                SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.8,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.event_busy,
+                          size: 64,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          _selectedCategory != null
+                              ? 'No events found in $_selectedCategory category'
+                              : _selectedDistrict != null
+                                  ? 'No events found in $_selectedDistrict district'
+                                  : 'No events found',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton(
+                          onPressed: _navigateToCreateEvent,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Create Event'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _allEvents.length,
+              itemBuilder: (context, index) {
+                return EventCard(
+                  event: _allEvents[index],
+                  onAttend: () => _navigateToEventDetail(_allEvents[index]),
+                  showDeleteButton: _allEvents[index].isPast,
+                  onDelete: () => _deleteEvent(_allEvents[index]),
+                );
+              },
+            ),
+    );
+  }
+
+  // Build the My Events tab
+  Widget _buildMyEventsTab() {
+    final authService = Provider.of<AuthService>(context);
+    final currentUser = authService.currentUser;
+
+    // If user is not logged in, show login prompt
+    if (currentUser == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.login,
+              size: 64,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Please log in to view your events',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => LoginScreen()),
+                ).then((_) {
+                  // Refresh after login
+                  _loadEvents();
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Log In'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _refreshEvents,
+      child: _isLoading 
+        ? const Center(child: CircularProgressIndicator())
+        : _myEvents.isEmpty
+          ? ListView(
+              children: [
+                SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.7,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.event_busy,
+                          size: 64,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'You haven\'t joined any events yet',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton.icon(
+                          onPressed: () => _tabController.animateTo(0),
+                          icon: const Icon(Icons.search),
+                          label: const Text('Find Events'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _myEvents.length,
+              itemBuilder: (context, index) {
+                final event = _myEvents[index];
+                return EventCard(
+                  event: event,
+                  onAttend: () => _navigateToEventDetail(event),
+                  showDeleteButton: event.isPast && _isOrganizerOrAdmin(event),
+                  onDelete: () => _deleteEvent(event),
+                );
+              },
+            ),
+    );
+  }
+  
+  // Build Calendar Tab
+  Widget _buildCalendarTab() {
+    // Check if the events have been loaded
+    if (_allEvents.isEmpty) {
+      // If no events, show a message and trigger a load
+      _loadEvents();
+      
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.event_note,
+              size: 64,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'No events found in the calendar',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _refreshEvents,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Refresh Events'),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // Implement calendar view with EventCalendarView widget
+    return RefreshIndicator(
+      onRefresh: _refreshEvents,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        child: EventCalendarView(
+          events: _allEvents,
+          onDaySelected: _onDaySelected,
+        ),
+      ),
+    );
+  }
+
+  // Build search results list
+  Widget _buildSearchResultsList() {
+    if (_allEvents.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.search_off,
+              size: 64,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No results found for "$_searchQuery"',
+              style: const TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Try different keywords or filters',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _clearSearch,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              child: const Text('Clear Search'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Display search results
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _allEvents.length,
+      itemBuilder: (context, index) {
+        return EventCard(
+          event: _allEvents[index],
+          onAttend: () => _navigateToEventDetail(_allEvents[index]),
+        );
+      },
+    );
   }
   
   // Method to delete an event
@@ -321,13 +617,31 @@ class _EventsScreenState extends State<EventsScreen>
   }
 
   void _onDaySelected(DateTime selectedDay) {
-    setState(() {
-      _selectedDate = selectedDay;
-    });
+    // This method intentionally left empty for now
+    // It will be implemented when needed for calendar functionality
   }
 
-  Future<void> _refreshEvents() async {
-    await _loadEvents();
+  // Check if current user is organizer or admin
+  bool _isOrganizerOrAdmin(Event event) {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser;
+    
+    if (currentUser == null) return false;
+    
+    return event.organizerId == currentUser.id || (currentUser.isAdmin ?? false);
+  }
+
+  // Navigate to event detail screen
+  void _navigateToEventDetail(Event event) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EventDetailScreen(event: event),
+      ),
+    ).then((_) {
+      // Refresh events when returning from details
+      _loadEvents();
+    });
   }
 
   @override
@@ -396,7 +710,7 @@ class _EventsScreenState extends State<EventsScreen>
                     // All Events Tab
                     _buildAllEventsTab(),
 
-                    // Calendar Tab - Now implemented!
+                    // Calendar Tab
                     _buildCalendarTab(),
 
                     // My Events Tab
@@ -411,293 +725,5 @@ class _EventsScreenState extends State<EventsScreen>
             )
           : null,
     );
-  }
-
-  Widget _buildSearchResultsList() {
-    if (_allEvents.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.search_off,
-              size: 64,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No results found for "$_searchQuery"',
-              style: const TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Try different keywords or filters',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _clearSearch,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              ),
-              child: const Text('Clear Search'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Display search results
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _allEvents.length,
-      itemBuilder: (context, index) {
-        return EventCard(
-          event: _allEvents[index],
-          onAttend: () => _navigateToEventDetail(_allEvents[index]),
-        );
-      },
-    );
-  }
-
-  Widget _buildAllEventsTab() {
-    // Use a simpler approach to avoid infinite loading issues
-    return RefreshIndicator(
-      onRefresh: _refreshEvents,
-      child: _isLoading 
-        ? const Center(child: CircularProgressIndicator())
-        : _allEvents.isEmpty
-          ? ListView(
-              children: [
-                SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.8,
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.event_busy,
-                          size: 64,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          _selectedCategory != null
-                              ? 'No events found in $_selectedCategory category'
-                              : _selectedDistrict != null
-                                  ? 'No events found in $_selectedDistrict district'
-                                  : 'No events found',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        ElevatedButton(
-                          onPressed: _navigateToCreateEvent,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text('Create Event'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _allEvents.length,
-              itemBuilder: (context, index) {
-                return EventCard(
-                  event: _allEvents[index],
-                  onAttend: () => _navigateToEventDetail(_allEvents[index]),
-                  showDeleteButton: _allEvents[index].isPast,
-                  onDelete: () => _deleteEvent(_allEvents[index]),
-                );
-              },
-            ),
-    );
-  }
-
-  Widget _buildCalendarTab() {
-    // Check if the events have been loaded
-    if (_allEvents.isEmpty) {
-      // If no events, show a message and trigger a load
-      _loadEvents();
-      
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.event_note,
-              size: 64,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'No events found in the calendar',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _refreshEvents,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Refresh Events'),
-            ),
-          ],
-        ),
-      );
-    }
-    
-    // Log events for debugging
-    debugPrint('Building calendar with ${_allEvents.length} events');
-    for (var event in _allEvents) {
-      debugPrint('Event: ${event.title} on ${event.date}');
-    }
-    
-    // Implement calendar view with EventCalendarView widget
-    return RefreshIndicator(
-      onRefresh: _refreshEvents,
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        child: EventCalendarView(
-          events: _allEvents,
-          onDaySelected: _onDaySelected,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMyEventsTab() {
-    final authService = Provider.of<AuthService>(context);
-    final currentUser = authService.currentUser;
-
-    // If user is not logged in, show login prompt
-    if (currentUser == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.login,
-              size: 64,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Please log in to view your events',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => LoginScreen()),
-                ).then((_) {
-                  // Refresh after login
-                  _loadEvents();
-                });
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Log In'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Use simple approach to avoid infinite loading
-    return RefreshIndicator(
-      onRefresh: _refreshEvents,
-      child: _isLoading 
-        ? const Center(child: CircularProgressIndicator())
-        : _myEvents.isEmpty
-          ? ListView(
-              children: [
-                SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.8,
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.event_busy,
-                          size: 64,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'You haven\'t joined any events yet',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        ElevatedButton(
-                          onPressed: () => _tabController.animateTo(0),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text('Find Events'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _myEvents.length,
-              itemBuilder: (context, index) {
-                return EventCard(
-                  event: _myEvents[index],
-                  onAttend: () => _navigateToEventDetail(_myEvents[index]),
-                  showDeleteButton: _myEvents[index].isPast,
-                  onDelete: () => _deleteEvent(_myEvents[index]),
-                );
-              },
-            ),
-    );
-  }
-
-  void _navigateToEventDetail(Event event) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => EventDetailScreen(event: event),
-      ),
-    ).then((_) {
-      // Refresh events when returning from details
-      _loadEvents();
-    });
   }
 }
