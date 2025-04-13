@@ -284,7 +284,7 @@ class _EventsScreenState extends State<EventsScreen>
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => LoginScreen()),
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
                 ).then((_) {
                   // Refresh after login
                   _loadEvents();
@@ -600,7 +600,7 @@ class _EventsScreenState extends State<EventsScreen>
       // Navigate to login screen
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => LoginScreen()),
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
       );
       return;
     }

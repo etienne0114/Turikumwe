@@ -77,7 +77,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       if (item['type'] == 'choice') {
         if (!item.containsKey('options') ||
             item['options'] == null ||
-            !(item['options'] is List) ||
+            item['options'] is! List ||
             (item['options'] as List).isEmpty) {
           errorMessage = 'Question ${i + 1} has no options';
           isValid = false;

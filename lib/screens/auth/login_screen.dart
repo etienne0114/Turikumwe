@@ -79,7 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     height: 100,
                   ),
                   const SizedBox(height: 30),
-                  
+
                   // Title
                   const Text(
                     AppStrings.login,
@@ -90,7 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 20),
-                  
+
                   // Email field
                   CustomTextField(
                     controller: _emailController,
@@ -101,14 +101,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       if (value == null || value.isEmpty) {
                         return 'Please enter your email';
                       }
-                      if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                      if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                          .hasMatch(value)) {
                         return 'Please enter a valid email address';
                       }
                       return null;
                     },
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // Password field
                   CustomTextField(
                     controller: _passwordController,
@@ -126,7 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     },
                   ),
                   const SizedBox(height: 10),
-                  
+
                   // Forgot Password
                   Align(
                     alignment: Alignment.centerRight,
@@ -138,7 +139,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  
+
                   // Login button
                   CustomButton(
                     text: AppStrings.login,
@@ -146,7 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: _login,
                   ),
                   const SizedBox(height: 20),
-                  
+
                   // Register link
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -156,7 +157,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         onPressed: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => const RegisterScreen()),
+                            MaterialPageRoute(
+                                builder: (context) => const RegisterScreen()),
                           );
                         },
                         child: const Text(AppStrings.register),
